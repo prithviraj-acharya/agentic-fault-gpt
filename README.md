@@ -25,8 +25,8 @@ The final system will include:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/<your-username>/agentic-bms.git
-cd agentic-bms
+git clone https://github.com/<your-username>/agentic-fault-gpt.git
+cd agentic-fault-gpt
 ```
 
 ### 2. Create a Virtual Environment
