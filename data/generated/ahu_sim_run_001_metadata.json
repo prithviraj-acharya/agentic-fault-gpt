@@ -1,0 +1,74 @@
+{
+  "run_id": "ahu_sim_run_001",
+  "scenario_name": "normal_then_faults_v1",
+  "ahu_id": 1,
+  "start_time": "2025-12-01T09:00:00Z",
+  "end_time": "2025-12-01T15:00:00Z",
+  "sampling_interval_sec": 60,
+  "seed": 42,
+  "signals": [
+    "timestamp",
+    "ahu_id",
+    "oa_temp",
+    "ra_temp",
+    "ma_temp",
+    "sa_temp",
+    "sa_temp_sp",
+    "avg_zone_temp",
+    "cc_valve",
+    "oa_damper",
+    "ra_damper",
+    "sa_fan_speed"
+  ],
+  "notes": "Baseline AHU operation followed by three representative fault episodes for Phase 2 validation.",
+  "fault_episodes": [
+    {
+      "episode_id": "F001",
+      "fault_type": "cooling_coil_fault",
+      "start_time": "2025-12-01T10:30:00Z",
+      "end_time": "2025-12-01T12:00:00Z",
+      "magnitude": 0.7,
+      "target_signals": [
+        "cc_valve",
+        "sa_temp",
+        "avg_zone_temp"
+      ],
+      "fault_params": {
+        "cooling_effectiveness": 0.3,
+        "ramp_minutes": 5
+      },
+      "description": "Chilled water valve stuck/leaking causing reduced cooling effectiveness."
+    },
+    {
+      "episode_id": "F002",
+      "fault_type": "stuck_damper_fault",
+      "start_time": "2025-12-01T13:00:00Z",
+      "end_time": "2025-12-01T14:29:00Z",
+      "magnitude": 1.0,
+      "target_signals": [
+        "oa_damper",
+        "ma_temp"
+      ],
+      "fault_params": {
+        "damper": "oa_damper",
+        "stuck_value": 100
+      },
+      "description": "Outside air damper stuck fully open, forcing excessive outdoor air intake."
+    },
+    {
+      "episode_id": "F003",
+      "fault_type": "zone_temp_sensor_drift",
+      "start_time": "2025-12-01T14:30:00Z",
+      "end_time": "2025-12-01T15:00:00Z",
+      "magnitude": 0.3,
+      "target_signals": [
+        "avg_zone_temp"
+      ],
+      "fault_params": {
+        "drift_c_per_hour": 0.5
+      },
+      "description": "Average zone temperature sensor slowly drifting upward over time."
+    }
+  ],
+  "scenario_source": "E:/dissertation-project/agentic-fault-gpt/simulation/scenarios/scenario_v1.json"
+}
