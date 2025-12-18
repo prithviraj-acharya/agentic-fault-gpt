@@ -1,0 +1,15 @@
+# Agentic-Fault-GPT - Requirements
+
+# Python 3.10+ recommended
+
+# -------------------------------
+# Core data handling
+# -------------------------------
+pandas
+numpy
+pyarrow   # required for parquet
+
+# -------------------------------
+# Utilities
+# -------------------------------
+python-dotenv

@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+
+# Virtual environments and dotenvs
+.env
+.env.*
+.venv/
+venv/
+
+# Build/packaging
+build/
+dist/
+*.egg-info/
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# IDE/editor metadata
+.vscode/
+.idea/
+*.code-workspace
+
+# Large datasets (CSIRO parquet reference)
+docs/experiments/datasets/
