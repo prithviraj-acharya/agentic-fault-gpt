@@ -14,7 +14,8 @@ Modern Building Management Systems (BMS) generate high-frequency telemetry acros
 ### Implemented So Far (Current Repo State)
 
 - Scenario-driven AHU telemetry simulator (Phase 2)
-- Deterministic offline generation (seeded RNG) to CSV + metadata JSON
+- Deterministic generation (seeded RNG) to telemetry CSV + metadata JSON
+- Local-first streaming producer (scenario -> event stream, with optional Kafka sink)
 - Fault schedule support via non-overlapping, time-bounded fault episodes
 - Fault injection modules (row modifiers) with optional ramp-in (`ramp_minutes`)
 - Scenario validation (UTC timestamps, episode window containment, basic bounds/type checks)
@@ -39,10 +40,45 @@ The main simulator entrypoint is:
 python -m simulation.simulator --scenario simulation/scenarios/scenario_v1.json --out data/generated
 ```
 
+Use this when you only want offline file outputs (no streaming).
+
 This will generate two files (filenames include the scenario `run_id`):
 
 - `data/generated/<run_id>_telemetry.csv`
 - `data/generated/<run_id>_metadata.json`
+
+### Replay Telemetry as a Local Stream (Producer)
+
+You can stream events in two ways:
+
+1. Generate from a scenario (streams while generating, and writes CSV+metadata):
+
+```bash
+python -m simulation.producer --scenario simulation/scenarios/scenario_v1.json --mode local --speed 0 --out data/generated
+```
+
+Preview a few events without stopping generation (still writes the full CSV/metadata):
+
+```bash
+python -m simulation.producer --scenario simulation/scenarios/scenario_v1.json --mode local --speed 0 --out data/generated --max-events 2
+```
+
+Stop the run early (only generates N events total):
+
+```bash
+python -m simulation.producer --scenario simulation/scenarios/scenario_v1.json --mode local --speed 0 --out data/generated --max-events 2
+```
+
+2. Replay from an existing telemetry CSV:
+
+```bash
+python -m simulation.producer --input data/generated/<run_id>_telemetry.csv --mode local --speed 0
+```
+
+- `--mode local` prints one JSON event per line (good for debugging and for piping into other tools)
+- `--speed 1.0` replays at real-time gaps between timestamps; `--speed 0` replays as fast as possible
+
+Kafka publishing is available as a drop-in sink (`--mode kafka`) once Kafka dependencies are installed.
 
 ### Scenario File
 
