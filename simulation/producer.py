@@ -177,6 +177,7 @@ def _replay(
     *,
     sink: EventSink,
     speed: float,
+    emit_interval_s: float | None = None,
     max_events: int | None = None,
 ) -> int:
     """Replay events in timestamp order.
@@ -185,6 +186,10 @@ def _replay(
       - 1.0 = real-time gaps
       - 2.0 = 2x faster (sleep half as long)
       - 0.0 = no sleeping (as fast as possible)
+
+        emit_interval_s:
+            - If set to a value > 0, sleeps a fixed number of seconds between emitted
+                events and overrides timestamp-based sleeping via `speed`.
     """
 
     prev_ts = None
@@ -198,14 +203,21 @@ def _replay(
                 raise ValueError("Event missing non-empty 'timestamp' field")
             ts = parse_iso8601(ts_raw)
 
-            if prev_ts is not None and speed > 0.0:
-                gap_s = (ts - prev_ts).total_seconds()
-                if gap_s > 0:
-                    time.sleep(gap_s / speed)
+            if emit_interval_s is None or emit_interval_s <= 0.0:
+                if prev_ts is not None and speed > 0.0:
+                    gap_s = (ts - prev_ts).total_seconds()
+                    if gap_s > 0:
+                        time.sleep(gap_s / speed)
 
             sink.publish(event)
             prev_ts = ts
             count += 1
+
+            if emit_interval_s is not None and emit_interval_s > 0.0:
+                # Sleep *after* publishing so the first event is immediate.
+                # Don't sleep after the last emitted event.
+                if max_events is None or count < max_events:
+                    time.sleep(float(emit_interval_s))
     finally:
         sink.close()
     return count
@@ -258,6 +270,15 @@ def main() -> int:
         help="Replay speed factor: 1.0=real-time, 2.0=2x faster, 0=as fast as possible",
     )
     parser.add_argument(
+        "--emit-interval-s",
+        type=float,
+        default=None,
+        help=(
+            "If set to > 0, sleep a fixed number of seconds between emitted events "
+            "(overrides timestamp-based replay via --speed)"
+        ),
+    )
+    parser.add_argument(
         "--max-events",
         type=int,
         default=0,
@@ -302,6 +323,8 @@ def main() -> int:
 
     if args.speed < 0.0:
         raise SystemExit("--speed must be >= 0")
+    if args.emit_interval_s is not None and args.emit_interval_s < 0.0:
+        raise SystemExit("--emit-interval-s must be >= 0")
     if args.max_events < 0:
         raise SystemExit("--max-events must be >= 0")
 
@@ -382,6 +405,7 @@ def main() -> int:
             events,
             sink=sink,
             speed=float(args.speed),
+            emit_interval_s=args.emit_interval_s,
             max_events=max_events,
         )
 
@@ -411,6 +435,7 @@ def main() -> int:
         events,
         sink=base_sink,
         speed=float(args.speed),
+        emit_interval_s=args.emit_interval_s,
         max_events=max_events,
     )
     print(f"Replayed {count} events from {input_path}")

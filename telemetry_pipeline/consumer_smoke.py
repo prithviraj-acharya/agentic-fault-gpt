@@ -32,16 +32,30 @@ def main() -> int:
         help="If set, read from earliest offset (otherwise latest)",
     )
     parser.add_argument(
-        "--max-messages",
-        type=int,
-        default=10,
-        help="Stop after N messages (0 means run until timeout) (default: 10)",
+        "--min-interval-s",
+        type=float,
+        default=0.0,
+        help="Minimum wall-clock seconds between processed messages (0 means no throttling) (default: 0)",
     )
     parser.add_argument(
-        "--timeout-s",
+        "--max-messages",
+        type=int,
+        default=0,
+        help="Stop after N messages (0 means no message limit) (default: 0)",
+    )
+    parser.add_argument(
+        "--idle-timeout-s",
         type=float,
-        default=10.0,
-        help="Stop if no message arrives within this many seconds (default: 10)",
+        default=0.0,
+        help="Stop if no message arrives for this many seconds (0 means run forever) (default: 0)",
+    )
+    # Backwards-compatible alias (kept for older docs/scripts).
+    parser.add_argument(
+        "--timeout-s",
+        dest="idle_timeout_s",
+        type=float,
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--pretty",
@@ -53,8 +67,10 @@ def main() -> int:
 
     if args.max_messages < 0:
         raise SystemExit("--max-messages must be >= 0")
-    if args.timeout_s <= 0:
-        raise SystemExit("--timeout-s must be > 0")
+    if args.idle_timeout_s < 0:
+        raise SystemExit("--idle-timeout-s must be >= 0")
+    if args.min_interval_s < 0:
+        raise SystemExit("--min-interval-s must be >= 0")
 
     received = 0
     for parsed in iter_kafka_events(
@@ -62,7 +78,13 @@ def main() -> int:
         topic=str(args.topic),
         group_id=str(args.group_id),
         from_beginning=bool(args.from_beginning),
-        poll_timeout_s=float(args.timeout_s),
+        poll_timeout_s=1.0,
+        idle_timeout_s=(
+            float(args.idle_timeout_s) if float(args.idle_timeout_s) > 0 else None
+        ),
+        min_interval_s=(
+            float(args.min_interval_s) if float(args.min_interval_s) > 0 else None
+        ),
     ):
         if args.pretty and isinstance(parsed, dict):
             print(json.dumps(parsed, indent=2, sort_keys=True))

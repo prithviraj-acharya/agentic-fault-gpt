@@ -19,6 +19,7 @@ param(
     [string]$BootstrapServers = "localhost:9092",
     [string]$Topic = "ahu.telemetry",
     [double]$Speed = 0,
+    [double]$EmitIntervalS = 0,
     [string]$OutDir = "data/generated",
     [int]$MaxEvents = 0,
     [switch]$EnsureKafka
@@ -69,15 +70,16 @@ Write-Host "  Scenario:  $scenarioPath" -ForegroundColor DarkGray
 Write-Host "  Bootstrap: $BootstrapServers" -ForegroundColor DarkGray
 Write-Host "  Topic:     $Topic" -ForegroundColor DarkGray
 Write-Host "  Speed:     $Speed" -ForegroundColor DarkGray
+Write-Host "  Interval:  $EmitIntervalS" -ForegroundColor DarkGray
 Write-Host "  OutDir:    $outPath" -ForegroundColor DarkGray
 Write-Host "  MaxEvents: $MaxEvents" -ForegroundColor DarkGray
 
 Push-Location -LiteralPath $repoRoot
 try {
     if ($pythonExe -eq "python") {
-        & python -m simulation.producer --scenario "$scenarioPath" --mode kafka --bootstrap-servers "$BootstrapServers" --topic "$Topic" --speed $Speed --out "$outPath" --max-events $MaxEvents
+        & python -m simulation.producer --scenario "$scenarioPath" --mode kafka --bootstrap-servers "$BootstrapServers" --topic "$Topic" --speed $Speed --emit-interval-s $EmitIntervalS --out "$outPath" --max-events $MaxEvents
     } else {
-        & $pythonExe -m simulation.producer --scenario "$scenarioPath" --mode kafka --bootstrap-servers "$BootstrapServers" --topic "$Topic" --speed $Speed --out "$outPath" --max-events $MaxEvents
+        & $pythonExe -m simulation.producer --scenario "$scenarioPath" --mode kafka --bootstrap-servers "$BootstrapServers" --topic "$Topic" --speed $Speed --emit-interval-s $EmitIntervalS --out "$outPath" --max-events $MaxEvents
     }
 } finally {
     Pop-Location
