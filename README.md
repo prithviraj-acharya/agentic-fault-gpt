@@ -80,6 +80,50 @@ python -m simulation.producer --input data/generated/<run_id>_telemetry.csv --mo
 
 Kafka publishing is available as a drop-in sink (`--mode kafka`) once Kafka dependencies are installed.
 
+### Run Kafka Locally (Docker Compose)
+
+Start Kafka (KRaft / no ZooKeeper) + Kafka UI:
+
+```bash
+docker compose -f docker/docker-compose.kafka.yml up -d
+```
+
+Stop:
+
+```bash
+docker compose -f docker/docker-compose.kafka.yml down
+```
+
+Kafka UI: open `http://localhost:8080`
+
+If you want a completely clean slate (removes the persisted Kafka volume):
+
+```bash
+docker compose -f docker/docker-compose.kafka.yml down -v
+```
+
+### Publish Telemetry to Kafka
+
+```bash
+python -m simulation.producer \
+	--scenario simulation/scenarios/scenario_v1.json \
+	--mode kafka \
+	--bootstrap-servers localhost:9092 \
+	--topic ahu.telemetry \
+	--speed 0 \
+	--out data/generated
+```
+
+### Smoke-Check: Consume a Few Messages
+
+```bash
+python -m telemetry_pipeline.consumer_smoke \
+	--bootstrap-servers localhost:9092 \
+	--topic ahu.telemetry \
+	--from-beginning \
+	--max-messages 5
+```
+
 ### Scenario File
 
 Scenarios live under:

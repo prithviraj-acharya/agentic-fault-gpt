@@ -65,10 +65,14 @@ class KafkaSink:
         bootstrap_servers: str,
         topic: str,
         key_field: str = "ahu_id",
+        client_id: str = "ahu-telemetry-producer",
+        flush_timeout_s: float = 10.0,
     ) -> None:
         self._bootstrap_servers = bootstrap_servers
         self._topic = topic
         self._key_field = key_field
+        self._client_id = client_id
+        self._flush_timeout_s = float(flush_timeout_s)
 
         # Lazy import so local mode works without Kafka dependencies.
         try:
@@ -78,18 +82,38 @@ class KafkaSink:
                 "Kafka mode requires confluent-kafka. Install it and retry: pip install confluent-kafka"
             ) from e
 
-        self._producer = Producer({"bootstrap.servers": self._bootstrap_servers})
+        self._producer = Producer(
+            {
+                "bootstrap.servers": self._bootstrap_servers,
+                "client.id": self._client_id,
+            }
+        )
+
+    def _on_delivery(self, err, msg) -> None:  # pragma: no cover
+        if err is not None:
+            # Surface delivery errors clearly in local dev.
+            raise RuntimeError(f"Kafka delivery failed: {err}")
 
     def publish(self, event: Dict[str, Any]) -> None:  # pragma: no cover
         payload = json.dumps(event, separators=(",", ":")).encode("utf-8")
         key_val = event.get(self._key_field)
         key = None if key_val is None else str(key_val).encode("utf-8")
-        self._producer.produce(self._topic, value=payload, key=key)
+
+        # Backpressure: if the local producer queue is full, poll and retry.
+        while True:
+            try:
+                self._producer.produce(
+                    self._topic, value=payload, key=key, on_delivery=self._on_delivery
+                )
+                break
+            except BufferError:
+                self._producer.poll(0.1)
+
         # Poll to serve delivery callbacks and keep internal buffers moving.
         self._producer.poll(0)
 
     def close(self) -> None:  # pragma: no cover
-        self._producer.flush(10)
+        self._producer.flush(self._flush_timeout_s)
 
 
 @dataclass
@@ -262,6 +286,18 @@ def main() -> int:
         help="Event field used as Kafka message key (kafka mode only)",
     )
 
+    parser.add_argument(
+        "--client-id",
+        default="ahu-telemetry-producer",
+        help="Kafka client.id (kafka mode only)",
+    )
+    parser.add_argument(
+        "--flush-timeout-s",
+        type=float,
+        default=10.0,
+        help="Flush timeout in seconds on shutdown (kafka mode only)",
+    )
+
     args = parser.parse_args()
 
     if args.speed < 0.0:
@@ -277,6 +313,8 @@ def main() -> int:
             bootstrap_servers=str(args.bootstrap_servers),
             topic=str(args.topic),
             key_field=str(args.key_field),
+            client_id=str(args.client_id),
+            flush_timeout_s=float(args.flush_timeout_s),
         )
 
     # Scenario mode: generate events using the simulator's shared generator, while
