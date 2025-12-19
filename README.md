@@ -189,6 +189,10 @@ The scenario contains:
 - Output columns: `signals` (used to order the telemetry CSV)
 - Fault schedule: `fault_episodes` (each with `start_time`, `end_time`, `fault_type`, `magnitude`, `fault_params`)
 
+See also:
+
+- `docs/specifications/simulation/simulation_overview.md`
+
 ### Fault Types Implemented
 
 Fault episodes are applied when `start_time <= ts < end_time` (inclusive start, exclusive end).
