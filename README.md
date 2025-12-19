@@ -32,6 +32,40 @@ Modern Building Management Systems (BMS) generate high-frequency telemetry acros
 
 ## ✅ What You Can Run Today
 
+### Quickstart: Kafka End-to-End (Recommended)
+
+This is the fastest way to see telemetry flowing through Kafka.
+
+1. Start Kafka + create the topic:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\kafka_bootstrap.ps1
+```
+
+2. In Terminal A, start the smoke consumer:
+
+```bash
+python -m telemetry_pipeline.consumer_smoke \
+	--bootstrap-servers localhost:9092 \
+	--topic ahu.telemetry \
+	--from-beginning \
+	--max-messages 5
+```
+
+3. In Terminal B, start the producer (publishes to Kafka):
+
+```bash
+python -m simulation.producer \
+	--scenario simulation/scenarios/scenario_v1.json \
+	--mode kafka \
+	--bootstrap-servers localhost:9092 \
+	--topic ahu.telemetry \
+	--speed 0 \
+	--out data/generated
+```
+
+If you created the topic with the script, you can run producer/consumer in any order.
+
 ### Run the Simulator
 
 The main simulator entrypoint is:
@@ -86,6 +120,12 @@ Start Kafka (KRaft / no ZooKeeper) + Kafka UI:
 
 ```bash
 docker compose -f docker/docker-compose.kafka.yml up -d
+```
+
+Or use the helper script (starts Kafka, waits for readiness, and creates the topic):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\kafka_bootstrap.ps1
 ```
 
 Stop:
@@ -165,7 +205,7 @@ python -m venv venv
 # macOS / Linux
 source venv/bin/activate
 # Windows
-venv\Scripts\activate
+venv\Scripts\Activate.ps1
 ```
 
 ### 3. Install Dependencies
@@ -173,6 +213,11 @@ venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
+
+Troubleshooting (Windows):
+
+- If `python` opens the Microsoft Store, use the venv python directly: `venv\Scripts\python.exe ...`
+- If Kafka consumer/producer complains about `confluent-kafka`, install it: `pip install -r requirements.txt`
 
 ### 4. Configure Environment
 
