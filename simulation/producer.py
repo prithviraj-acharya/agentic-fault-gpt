@@ -5,6 +5,7 @@ import csv
 import json
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Protocol
 
@@ -15,7 +16,42 @@ from simulation.simulator import (
     iter_telemetry_events,
     load_and_validate_scenario,
 )
-from simulation.utils import parse_iso8601
+from simulation.utils import FaultEpisode, parse_iso8601
+
+
+def _shift_to_start_now(
+    *,
+    start_time: datetime,
+    end_time: datetime,
+    episodes: List[FaultEpisode],
+    new_start_time: datetime,
+) -> tuple[datetime, datetime, List[FaultEpisode]]:
+    """Shift the scenario window and fault episode windows by a constant delta."""
+
+    if new_start_time.tzinfo is None:
+        new_start_time = new_start_time.replace(tzinfo=timezone.utc)
+    new_start_time = new_start_time.astimezone(timezone.utc).replace(microsecond=0)
+
+    delta = new_start_time - start_time
+    shifted_start = new_start_time
+    shifted_end = end_time + delta
+
+    shifted_episodes: List[FaultEpisode] = []
+    for ep in episodes:
+        shifted_episodes.append(
+            FaultEpisode(
+                episode_id=ep.episode_id,
+                fault_type=ep.fault_type,
+                start_time=ep.start_time + delta,
+                end_time=ep.end_time + delta,
+                magnitude=ep.magnitude,
+                target_signals=list(ep.target_signals),
+                fault_params=dict(ep.fault_params),
+                description=ep.description,
+            )
+        )
+
+    return shifted_start, shifted_end, shifted_episodes
 
 
 class EventSink(Protocol):
@@ -279,6 +315,14 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--start-now",
+        action="store_true",
+        help=(
+            "Shift scenario timestamps so the run starts at current UTC time, while keeping "
+            "fault episode offsets the same (scenario mode only)"
+        ),
+    )
+    parser.add_argument(
         "--max-events",
         type=int,
         default=0,
@@ -350,6 +394,14 @@ def main() -> int:
         scenario, start_time, end_time, interval_sec, episodes = (
             load_and_validate_scenario(scenario_path=scenario_path)
         )
+
+        if bool(args.start_now):
+            start_time, end_time, episodes = _shift_to_start_now(
+                start_time=start_time,
+                end_time=end_time,
+                episodes=episodes,
+                new_start_time=datetime.now(timezone.utc),
+            )
 
         signals = list(scenario["signals"])
         if "timestamp" not in signals:

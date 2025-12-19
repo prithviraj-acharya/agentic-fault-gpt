@@ -11,6 +11,7 @@ Examples:
     .\scripts\run_producer_kafka.ps1
     .\scripts\run_producer_kafka.ps1 -MaxEvents 5
     .\scripts\run_producer_kafka.ps1 -ScenarioFile simulation/scenarios/scenario_v1.json -Topic ahu.telemetry
+    .\scripts\run_producer_kafka.ps1 -NoStartNow   # use scenario's absolute timestamps
 #>
 
 [CmdletBinding()]
@@ -22,6 +23,7 @@ param(
     [double]$EmitIntervalS = 0,
     [string]$OutDir = "data/generated",
     [int]$MaxEvents = 0,
+    [switch]$NoStartNow,
     [switch]$EnsureKafka
 )
 
@@ -71,15 +73,19 @@ Write-Host "  Bootstrap: $BootstrapServers" -ForegroundColor DarkGray
 Write-Host "  Topic:     $Topic" -ForegroundColor DarkGray
 Write-Host "  Speed:     $Speed" -ForegroundColor DarkGray
 Write-Host "  Interval:  $EmitIntervalS" -ForegroundColor DarkGray
+Write-Host "  StartNow:  $(-not $NoStartNow)" -ForegroundColor DarkGray
 Write-Host "  OutDir:    $outPath" -ForegroundColor DarkGray
 Write-Host "  MaxEvents: $MaxEvents" -ForegroundColor DarkGray
 
 Push-Location -LiteralPath $repoRoot
 try {
+    $startNowArg = @()
+    if (-not $NoStartNow) { $startNowArg = @("--start-now") }
+
     if ($pythonExe -eq "python") {
-        & python -m simulation.producer --scenario "$scenarioPath" --mode kafka --bootstrap-servers "$BootstrapServers" --topic "$Topic" --speed $Speed --emit-interval-s $EmitIntervalS --out "$outPath" --max-events $MaxEvents
+        & python -m simulation.producer --scenario "$scenarioPath" --mode kafka --bootstrap-servers "$BootstrapServers" --topic "$Topic" --speed $Speed --emit-interval-s $EmitIntervalS @startNowArg --out "$outPath" --max-events $MaxEvents
     } else {
-        & $pythonExe -m simulation.producer --scenario "$scenarioPath" --mode kafka --bootstrap-servers "$BootstrapServers" --topic "$Topic" --speed $Speed --emit-interval-s $EmitIntervalS --out "$outPath" --max-events $MaxEvents
+        & $pythonExe -m simulation.producer --scenario "$scenarioPath" --mode kafka --bootstrap-servers "$BootstrapServers" --topic "$Topic" --speed $Speed --emit-interval-s $EmitIntervalS @startNowArg --out "$outPath" --max-events $MaxEvents
     }
 } finally {
     Pop-Location
