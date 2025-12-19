@@ -64,6 +64,18 @@ python -m simulation.producer \
 	--out data/generated
 ```
 
+Or use the helper script (short command, sensible defaults):
+
+```powershell
+.\scripts\run_producer_kafka.ps1
+```
+
+Quick test (send a few events then stop):
+
+```powershell
+.\scripts\run_producer_kafka.ps1 -MaxEvents 5
+```
+
 If you created the topic with the script, you can run producer/consumer in any order.
 
 ### Run the Simulator
