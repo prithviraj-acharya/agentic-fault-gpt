@@ -32,9 +32,9 @@ Modern Building Management Systems (BMS) generate high-frequency telemetry acros
 
 ## ✅ What You Can Run Today
 
-### Quickstart: Kafka End-to-End (Recommended)
+### Option A: Kafka end-to-end (recommended)
 
-This is the fastest way to see telemetry flowing through Kafka.
+Fastest way to see telemetry flowing through Kafka.
 
 1. Start Kafka + create the topic:
 
@@ -78,7 +78,7 @@ Quick test (send a few events then stop):
 
 If you created the topic with the script, you can run producer/consumer in any order.
 
-### Run the Simulator
+### Option B: offline files only
 
 The main simulator entrypoint is:
 
@@ -93,29 +93,15 @@ This will generate two files (filenames include the scenario `run_id`):
 - `data/generated/<run_id>_telemetry.csv`
 - `data/generated/<run_id>_metadata.json`
 
-### Replay Telemetry as a Local Stream (Producer)
+### Optional: local stream (no Kafka)
 
-You can stream events in two ways:
-
-1. Generate from a scenario (streams while generating, and writes CSV+metadata):
+Generate from a scenario and print one JSON event per line (still writes CSV+metadata):
 
 ```bash
 python -m simulation.producer --scenario simulation/scenarios/scenario_v1.json --mode local --speed 0 --out data/generated
 ```
 
-Preview a few events without stopping generation (still writes the full CSV/metadata):
-
-```bash
-python -m simulation.producer --scenario simulation/scenarios/scenario_v1.json --mode local --speed 0 --out data/generated --max-events 2
-```
-
-Stop the run early (only generates N events total):
-
-```bash
-python -m simulation.producer --scenario simulation/scenarios/scenario_v1.json --mode local --speed 0 --out data/generated --max-events 2
-```
-
-2. Replay from an existing telemetry CSV:
+Replay from an existing telemetry CSV:
 
 ```bash
 python -m simulation.producer --input data/generated/<run_id>_telemetry.csv --mode local --speed 0
@@ -124,59 +110,7 @@ python -m simulation.producer --input data/generated/<run_id>_telemetry.csv --mo
 - `--mode local` prints one JSON event per line (good for debugging and for piping into other tools)
 - `--speed 1.0` replays at real-time gaps between timestamps; `--speed 0` replays as fast as possible
 
-Kafka publishing is available as a drop-in sink (`--mode kafka`) once Kafka dependencies are installed.
-
-### Run Kafka Locally (Docker Compose)
-
-Start Kafka (KRaft / no ZooKeeper) + Kafka UI:
-
-```bash
-docker compose -f docker/docker-compose.kafka.yml up -d
-```
-
-Or use the helper script (starts Kafka, waits for readiness, and creates the topic):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\kafka_bootstrap.ps1
-```
-
-Stop:
-
-```bash
-docker compose -f docker/docker-compose.kafka.yml down
-```
-
-Kafka UI: open `http://localhost:8080`
-
-If you want a completely clean slate (removes the persisted Kafka volume):
-
-```bash
-docker compose -f docker/docker-compose.kafka.yml down -v
-```
-
-### Publish Telemetry to Kafka
-
-```bash
-python -m simulation.producer \
-	--scenario simulation/scenarios/scenario_v1.json \
-	--mode kafka \
-	--bootstrap-servers localhost:9092 \
-	--topic ahu.telemetry \
-	--speed 0 \
-	--out data/generated
-```
-
-### Smoke-Check: Consume a Few Messages
-
-```bash
-python -m telemetry_pipeline.consumer_smoke \
-	--bootstrap-servers localhost:9092 \
-	--topic ahu.telemetry \
-	--from-beginning \
-	--max-messages 5
-```
-
-### Scenario File
+### Scenario file
 
 Scenarios live under:
 
@@ -248,23 +182,13 @@ LOG_LEVEL=INFO
 
 ## 📅 Project Timeline Alignment
 
-This repository follows a structured 13-week timeline aligned with BITS WILP dissertation milestones.
-
-Key checkpoints:
-
-- **Mid-Sem Report:** Simulation + Consumer Layers
-- **Final Report:** Full RAG pipeline + Dashboard
-- **Final Viva:** End-to-end demo + evaluation metrics
+(Intentionally omitted here to keep the README short.)
 
 ---
 
 ## 📘 Documentation
 
-Simulation specifications and notes live under:
-
-- `docs/specifications/simulation/`
-
-This includes schema and fault-episode rules used by the simulator/validator.
+Simulation specifications and notes: `docs/specifications/simulation/`
 
 ---
 
