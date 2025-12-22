@@ -1,0 +1,58 @@
+rules:
+  # --- Cooling response symptoms ---
+  SAT_NOT_DROPPING_WHEN_VALVE_HIGH:
+    enabled: true
+    severity: medium
+    params:
+      valve_high_pct: 70
+      sat_slope_min: 0.0
+      min_samples: 30
+
+  SAT_TOO_HIGH_WHEN_VALVE_HIGH:
+    enabled: true
+    severity: medium
+    params:
+      valve_high_pct: 70
+      sa_temp_mean_minus_sp_high: 1.0
+
+  # --- Damper symptoms ---
+  OA_DAMPER_STUCK_OR_FLATLINE:
+    enabled: true
+    severity: low
+    params:
+      damper_var_eps: 0.05
+
+  RA_DAMPER_STUCK_OR_FLATLINE:
+    enabled: true
+    severity: low
+    params:
+      damper_var_eps: 0.05
+
+  # --- Zone temp symptoms ---
+  ZONE_TEMP_PERSISTENT_TREND:
+    enabled: true
+    severity: low
+    params:
+      # Must match the feature extractor's slope units.
+      # Recommended: slope in °C/min.
+      zone_slope_high: 0.05
+
+  ZONE_TEMP_SENSOR_NOISY:
+    enabled: true
+    severity: low
+    params:
+      zone_var_high: 0.25
+
+  # --- Data quality ---
+  MISSING_DATA_HIGH:
+    enabled: true
+    severity: medium
+    params:
+      missing_ratio_high: 0.2
+
+  OUT_OF_RANGE_VALUES:
+    enabled: true
+    severity: high
+    params:
+      # Uses signals.yaml min/max bounds.
+      use_signal_bounds: true

@@ -1,0 +1,35 @@
+schema:
+  timestamp_field: timestamp
+  ahu_id_field: ahu_id
+
+# Signal vocabulary for Phase 3.
+# Must remain stable once evaluation begins.
+signals:
+  # temperatures (°C)
+  oa_temp: {unit: "C", min: 10, max: 45}
+  ra_temp: {unit: "C", min: 18, max: 30}
+  ma_temp: {unit: "C", min: 10, max: 45}
+  sa_temp: {unit: "C", min: 10, max: 20}
+  sa_temp_sp: {unit: "C", min: 12, max: 18}
+  avg_zone_temp: {unit: "C", min: 20, max: 28}
+
+  # actuators (%)
+  cc_valve: {unit: "%", min: 0, max: 100}
+  oa_damper: {unit: "%", min: 0, max: 100}
+  ra_damper: {unit: "%", min: 0, max: 100}
+  sa_fan_speed: {unit: "%", min: 0, max: 100}
+
+# Feature naming convention:
+#   per-signal: {signal}_{stat}
+#   cross-signal: explicitly named outputs
+features:
+  per_signal:
+    stats: [mean, var, slope, delta, min, max]
+
+  # Cross-signal features are declared here so downstream rule code can assume stable keys.
+  # Avoid evaluating arbitrary expressions; keep this list small and explicit.
+  cross_signal:
+    - name: sa_temp_mean_minus_sp
+      expr: "sa_temp_mean - sa_temp_sp_mean"
+    - name: ra_temp_mean_minus_sa
+      expr: "ra_temp_mean - sa_temp_mean"

@@ -1,0 +1,16 @@
+windowing:
+  window_type: tumbling       # tumbling | sliding
+  window_size_sec: 300        # 60 for dev, 300 for demo/eval
+  step_sec: null              # required only for sliding
+  align_to_epoch: true        # stable boundaries across runs
+
+ordering:
+  enable_dedup: true
+  # Prefer structured field lists to avoid ambiguous string parsing.
+  dedup_key_fields: [ahu_id, timestamp]
+  reorder_buffer_sec: 5       # small buffer to sort by timestamp
+
+missing_data:
+  allow_missing_values: true
+  drop_event_if_missing_timestamp: true
+  drop_event_if_missing_ahu_id: true
