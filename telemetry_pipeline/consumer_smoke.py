@@ -4,7 +4,7 @@ import argparse
 import json
 from typing import Any, Dict
 
-from telemetry_pipeline.consumer import iter_kafka_events
+from telemetry_pipeline.consumer import iter_telemetry_events
 
 
 def main() -> int:
@@ -73,7 +73,7 @@ def main() -> int:
         raise SystemExit("--min-interval-s must be >= 0")
 
     received = 0
-    for parsed in iter_kafka_events(
+    for event in iter_telemetry_events(
         bootstrap_servers=str(args.bootstrap_servers),
         topic=str(args.topic),
         group_id=str(args.group_id),
@@ -86,13 +86,10 @@ def main() -> int:
             float(args.min_interval_s) if float(args.min_interval_s) > 0 else None
         ),
     ):
-        if args.pretty and isinstance(parsed, dict):
-            print(json.dumps(parsed, indent=2, sort_keys=True))
+        if args.pretty:
+            print(json.dumps(event, indent=2, sort_keys=True))
         else:
-            if isinstance(parsed, dict):
-                print(json.dumps(parsed, separators=(",", ":"), sort_keys=False))
-            else:
-                print(parsed)
+            print(json.dumps(event, separators=(",", ":"), sort_keys=False))
 
         received += 1
         if args.max_messages > 0 and received >= int(args.max_messages):

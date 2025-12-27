@@ -20,11 +20,19 @@ Modern Building Management Systems (BMS) generate high-frequency telemetry acros
 - Fault injection modules (row modifiers) with optional ramp-in (`ramp_minutes`)
 - Scenario validation (UTC timestamps, episode window containment, basic bounds/type checks)
 
+- Phase 3 telemetry pipeline (window summaries):
+  - Event validation + normalization
+  - Deterministic per-AHU ordering + de-dup buffer
+  - Tumbling window manager (epoch-aligned)
+  - Feature extraction (per-signal stats + cross-signal features)
+  - Rule-based symptom detection (YAML-driven thresholds)
+  - Canonical `window_summary` JSON output with deterministic text summary
+  - Local JSONL sink (and optional Kafka sink)
+
 ### Planned (Next Phases)
 
-- Streaming + windowing layer (Kafka producer/consumer)
+- Retrieval + indexing over manuals and past cases
 - Hierarchical RAG-based diagnostic engine
-- Retrieval over manuals, past cases, and dynamic memory
 - Ticketing layer for explainable maintenance workflows
 - Streamlit dashboard for interactive visualization
 
@@ -77,6 +85,59 @@ Quick test (send a few events then stop):
 ```
 
 If you created the topic with the script, you can run producer/consumer in any order.
+
+### Option C: Phase 3 window summaries (offline CSV → JSONL)
+
+This runs the full Phase 3 pipeline and writes one `window_summary` JSON object per line.
+
+1. Generate telemetry (Phase 2):
+
+```bash
+python -m simulation.simulator --scenario simulation/scenarios/scenario_v1.json --out data/generated
+```
+
+2. Run Phase 3 (CSV input → `window_summaries.jsonl`):
+
+```bash
+python -m telemetry_pipeline.run_pipeline \
+	--mode csv \
+	--csv data/generated/ahu_sim_run_001_telemetry.csv \
+	--sink jsonl \
+	--out data/generated/window_summaries.jsonl
+```
+
+Notes:
+
+- JSONL = JSON Lines: one summary per line (stream-friendly, easy to diff).
+- Frozen configs live under `telemetry_pipeline/config/`:
+  - `signals.yaml` (signal vocabulary + bounds + feature declarations)
+  - `windowing.yaml` (window size/type + ordering + missing data policy)
+  - `rules.yaml` (rule thresholds)
+
+### Option D: Phase 3 window summaries (Kafka input → JSONL or Kafka)
+
+If you already have telemetry being produced to Kafka (`ahu.telemetry`), you can consume from Kafka
+and emit window summaries:
+
+```bash
+python -m telemetry_pipeline.run_pipeline \
+	--mode kafka \
+	--bootstrap-servers localhost:9092 \
+	--topic ahu.telemetry \
+	--sink jsonl \
+	--out data/generated/window_summaries.jsonl
+```
+
+Or publish the summaries back to Kafka:
+
+```bash
+python -m telemetry_pipeline.run_pipeline \
+	--mode kafka \
+	--bootstrap-servers localhost:9092 \
+	--topic ahu.telemetry \
+	--sink kafka \
+	--summary-topic window_summaries
+```
 
 ### Option B: offline files only
 
@@ -189,6 +250,8 @@ LOG_LEVEL=INFO
 ## 📘 Documentation
 
 Simulation specifications and notes: `docs/specifications/simulation/`
+
+Telemetry pipeline specifications (Phase 3): `docs/specifications/telemetry_pipeline/`
 
 ---
 

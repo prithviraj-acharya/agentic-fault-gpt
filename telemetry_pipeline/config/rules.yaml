@@ -3,14 +3,19 @@ rules:
   SAT_NOT_DROPPING_WHEN_VALVE_HIGH:
     enabled: true
     severity: medium
+    symptom: "Cooling demand high but SAT not decreasing"
+    fault_hypotheses: [cooling_coil_fault]
     params:
       valve_high_pct: 70
       sat_slope_min: 0.0
-      min_samples: 30
+      # With 300s windows and 60s sampling, expect ~5 samples/window.
+      min_samples: 3
 
   SAT_TOO_HIGH_WHEN_VALVE_HIGH:
     enabled: true
     severity: medium
+    symptom: "SAT above setpoint while valve high"
+    fault_hypotheses: [cooling_coil_fault]
     params:
       valve_high_pct: 70
       sa_temp_mean_minus_sp_high: 1.0
@@ -19,12 +24,16 @@ rules:
   OA_DAMPER_STUCK_OR_FLATLINE:
     enabled: true
     severity: low
+    symptom: "OA damper variance near zero"
+    fault_hypotheses: [stuck_damper_fault]
     params:
       damper_var_eps: 0.05
 
   RA_DAMPER_STUCK_OR_FLATLINE:
     enabled: true
     severity: low
+    symptom: "RA damper variance near zero"
+    fault_hypotheses: [stuck_damper_fault]
     params:
       damper_var_eps: 0.05
 
@@ -32,14 +41,19 @@ rules:
   ZONE_TEMP_PERSISTENT_TREND:
     enabled: true
     severity: low
+    symptom: "Zone temperature persistent trend"
+    fault_hypotheses: [zone_temp_sensor_drift]
     params:
       # Must match the feature extractor's slope units.
       # Recommended: slope in °C/min.
-      zone_slope_high: 0.05
+      # Scenario drift is ~0.5°C/hour ≈ 0.0083°C/min.
+      zone_slope_high: 0.005
 
   ZONE_TEMP_SENSOR_NOISY:
     enabled: true
     severity: low
+    symptom: "Zone temperature variance unusually high"
+    fault_hypotheses: [zone_temp_sensor_drift]
     params:
       zone_var_high: 0.25
 
@@ -47,12 +61,16 @@ rules:
   MISSING_DATA_HIGH:
     enabled: true
     severity: medium
+    symptom: "High missing data ratio"
+    fault_hypotheses: [data_quality]
     params:
       missing_ratio_high: 0.2
 
   OUT_OF_RANGE_VALUES:
     enabled: true
     severity: high
+    symptom: "Signals outside configured bounds"
+    fault_hypotheses: [data_quality]
     params:
       # Uses signals.yaml min/max bounds.
       use_signal_bounds: true

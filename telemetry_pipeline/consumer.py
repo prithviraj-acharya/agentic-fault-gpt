@@ -1,18 +1,44 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
-from typing import Any, Dict, Iterator
+from typing import Any, Dict, Generator, Optional
+
+logger = logging.getLogger(__name__)
 
 
-def try_parse_json(data: bytes) -> Dict[str, Any] | str:
+def _preview_bytes(data: bytes, *, limit: int = 256) -> bytes:
+    if len(data) <= limit:
+        return data
+    return data[:limit] + b"...(truncated)"
+
+
+def try_parse_json(data: bytes) -> Optional[Dict[str, Any]]:
     try:
-        return json.loads(data.decode("utf-8"))
-    except Exception:
-        return data.decode("utf-8", errors="replace")
+        parsed: Any = json.loads(data.decode("utf-8"))
+    except Exception as e:
+        logger.warning(
+            "Failed to parse JSON: %s. Raw data (len=%d, preview=%r)",
+            e,
+            len(data),
+            _preview_bytes(data),
+        )
+        return None
+
+    if not isinstance(parsed, dict):
+        logger.warning(
+            "Skipping non-object JSON (type=%s). Raw data (len=%d, preview=%r)",
+            type(parsed).__name__,
+            len(data),
+            _preview_bytes(data),
+        )
+        return None
+
+    return parsed
 
 
-def iter_kafka_events(
+def iter_kafka_events_raw(
     *,
     bootstrap_servers: str,
     topic: str,
@@ -21,13 +47,8 @@ def iter_kafka_events(
     poll_timeout_s: float,
     idle_timeout_s: float | None = None,
     min_interval_s: float | None = None,
-) -> Iterator[Dict[str, Any] | str]:
-    """Iterate events from a Kafka topic.
-
-    This is the reusable consumer primitive for Phase 3. Windowing/feature extraction
-    should consume from this iterator rather than embedding Kafka-specific code.
-    """
-
+) -> Generator[Dict[str, Any], None, None]:
+    """Iterate raw events from a Kafka topic (yields dicts, skips invalid JSON)."""
     try:
         from confluent_kafka import Consumer  # type: ignore
     except Exception as e:  # pragma: no cover
@@ -36,7 +57,6 @@ def iter_kafka_events(
         ) from e
 
     auto_offset_reset = "earliest" if bool(from_beginning) else "latest"
-
     consumer = Consumer(
         {
             "bootstrap.servers": str(bootstrap_servers),
@@ -45,7 +65,6 @@ def iter_kafka_events(
             "enable.auto.commit": True,
         }
     )
-
     consumer.subscribe([str(topic)])
 
     last_message_t = time.monotonic()
@@ -62,10 +81,10 @@ def iter_kafka_events(
             if msg.error() is not None:
                 raise SystemExit(f"Kafka consumer error: {msg.error()}")
 
+            last_message_t = time.monotonic()
             value = msg.value()
             if value is None:
                 continue
-            last_message_t = time.monotonic()
 
             if min_interval_s is not None and float(min_interval_s) > 0.0:
                 now = time.monotonic()
@@ -74,6 +93,74 @@ def iter_kafka_events(
                     if remaining > 0:
                         time.sleep(remaining)
                 last_yield_t = time.monotonic()
-            yield try_parse_json(value)
+
+            parsed = try_parse_json(value)
+            if parsed is None:
+                # Already logged
+                continue
+
+            # Log Kafka metadata for traceability
+            meta = {
+                "partition": msg.partition(),
+                "offset": msg.offset(),
+                "kafka_timestamp": msg.timestamp()[1] if msg.timestamp() else None,
+            }
+            logger.debug("Kafka message meta: %s", meta)
+
+            yield parsed
     finally:
         consumer.close()
+
+
+def iter_telemetry_events(
+    *,
+    bootstrap_servers: str,
+    topic: str,
+    group_id: str,
+    from_beginning: bool,
+    poll_timeout_s: float,
+    idle_timeout_s: float | None = None,
+    min_interval_s: float | None = None,
+) -> Generator[Dict[str, Any], None, None]:
+    """Yield normalized telemetry events matching `docs/specifications/simulation/telemetry_schema.md`.
+
+    Output shape (flat):
+      {"timestamp": str, "ahu_id": <str/int>, <signal>: <num|None>, ...}
+
+    Accepts either:
+      - flat payloads (signals at top-level)
+      - nested payloads under `signals`
+    """
+
+    for event in iter_kafka_events_raw(
+        bootstrap_servers=bootstrap_servers,
+        topic=topic,
+        group_id=group_id,
+        from_beginning=from_beginning,
+        poll_timeout_s=poll_timeout_s,
+        idle_timeout_s=idle_timeout_s,
+        min_interval_s=min_interval_s,
+    ):
+        ts = event.get("timestamp") or event.get("ts")
+        ahu_id = event.get("ahu_id")
+        signals = event.get("signals")
+
+        if signals is None:
+            signals = {
+                k: v
+                for k, v in event.items()
+                if k not in ("ts", "timestamp", "ahu_id", "signals")
+            }
+
+        if ts is None or ahu_id is None or not isinstance(signals, dict):
+            logger.warning("Skipping event missing required fields: %r", event)
+            continue
+
+        if not isinstance(ts, str):
+            ts = str(ts)
+
+        out: Dict[str, Any] = {"timestamp": ts, "ahu_id": ahu_id}
+        for k, v in signals.items():
+            out[str(k)] = v
+
+        yield out
