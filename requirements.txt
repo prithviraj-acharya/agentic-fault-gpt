@@ -24,3 +24,5 @@ pyyaml
 # -------------------------------
 # Only required if you run: python -m simulation.producer --mode kafka
 confluent-kafka
+fastapi
+uvicorn[standard]
