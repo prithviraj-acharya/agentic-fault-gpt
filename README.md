@@ -40,27 +40,42 @@ Modern Building Management Systems (BMS) generate high-frequency telemetry acros
 
 ## ✅ What You Can Run Today
 
-### Option A: Kafka end-to-end (recommended)
+### 1) Start Kafka (Docker)
 
-Fastest way to see telemetry flowing through Kafka.
-
-1. Start Kafka + create the topic:
+Start Kafka + Kafka UI:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\kafka_bootstrap.ps1
+docker compose -f docker/docker-compose.kafka.yml up -d
 ```
 
-2. In Terminal A, start the smoke consumer:
+Create the telemetry topic (idempotent):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\kafka_bootstrap.ps1 -Topic ahu.telemetry
+```
+
+Create the window summary topic (idempotent):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\kafka_bootstrap.ps1 -Topic window_summaries
+```
+
+### 2) Generate telemetry (offline files)
+
+Generates the full scenario telemetry CSV + metadata JSON:
 
 ```bash
-python -m telemetry_pipeline.consumer_smoke \
-	--bootstrap-servers localhost:9092 \
-	--topic ahu.telemetry \
-	--from-beginning \
-	--max-messages 5
+python -m simulation.simulator --scenario simulation/scenarios/scenario_v1.json --out data/generated
 ```
 
-3. In Terminal B, start the producer (publishes to Kafka):
+Outputs:
+
+- `data/generated/<run_id>_telemetry.csv`
+- `data/generated/<run_id>_metadata.json`
+
+### 3) Stream telemetry to Kafka
+
+Streams the scenario events to Kafka topic `ahu.telemetry`:
 
 ```bash
 python -m simulation.producer \
@@ -68,35 +83,16 @@ python -m simulation.producer \
 	--mode kafka \
 	--bootstrap-servers localhost:9092 \
 	--topic ahu.telemetry \
+	--start-now \
 	--speed 0 \
 	--out data/generated
 ```
 
-Or use the helper script (short command, sensible defaults):
-
-```powershell
-.\scripts\run_producer_kafka.ps1
-```
-
-Quick test (send a few events then stop):
-
-```powershell
-.\scripts\run_producer_kafka.ps1 -MaxEvents 5
-```
-
-If you created the topic with the script, you can run producer/consumer in any order.
-
-### Option C: Phase 3 window summaries (offline CSV → JSONL)
+### 4) Phase 3 window summaries
 
 This runs the full Phase 3 pipeline and writes one `window_summary` JSON object per line.
 
-1. Generate telemetry (Phase 2):
-
-```bash
-python -m simulation.simulator --scenario simulation/scenarios/scenario_v1.json --out data/generated
-```
-
-2. Run Phase 3 (CSV input → `window_summaries.jsonl`):
+#### 4a) Offline: CSV → JSONL
 
 ```bash
 python -m telemetry_pipeline.run_pipeline \
@@ -104,6 +100,20 @@ python -m telemetry_pipeline.run_pipeline \
 	--csv data/generated/ahu_sim_run_001_telemetry.csv \
 	--sink jsonl \
 	--out data/generated/window_summaries.jsonl
+```
+
+#### 4b) Kafka: telemetry topic → window summary topic
+
+Consumes `ahu.telemetry` and publishes `window_summaries`:
+
+```bash
+python -m telemetry_pipeline.run_pipeline \
+	--mode kafka \
+	--bootstrap-servers localhost:9092 \
+	--topic ahu.telemetry \
+	--from-beginning \
+	--sink kafka \
+	--summary-topic window_summaries
 ```
 
 Notes:
@@ -114,45 +124,17 @@ Notes:
   - `windowing.yaml` (window size/type + ordering + missing data policy)
   - `rules.yaml` (rule thresholds)
 
-### Option D: Phase 3 window summaries (Kafka input → JSONL or Kafka)
+### 5) Dashboard backend API (Docker)
 
-If you already have telemetry being produced to Kafka (`ahu.telemetry`), you can consume from Kafka
-and emit window summaries:
+Build + run the backend API alongside Kafka:
 
-```bash
-python -m telemetry_pipeline.run_pipeline \
-	--mode kafka \
-	--bootstrap-servers localhost:9092 \
-	--topic ahu.telemetry \
-	--sink jsonl \
-	--out data/generated/window_summaries.jsonl
+```powershell
+docker compose -f docker/docker-compose.kafka.yml -f docker/docker-compose.api.snippet.yml up --build dashboard-api
 ```
 
-Or publish the summaries back to Kafka:
+Health URL:
 
-```bash
-python -m telemetry_pipeline.run_pipeline \
-	--mode kafka \
-	--bootstrap-servers localhost:9092 \
-	--topic ahu.telemetry \
-	--sink kafka \
-	--summary-topic window_summaries
-```
-
-### Option B: offline files only
-
-The main simulator entrypoint is:
-
-```bash
-python -m simulation.simulator --scenario simulation/scenarios/scenario_v1.json --out data/generated
-```
-
-Use this when you only want offline file outputs (no streaming).
-
-This will generate two files (filenames include the scenario `run_id`):
-
-- `data/generated/<run_id>_telemetry.csv`
-- `data/generated/<run_id>_metadata.json`
+- http://localhost:8000/api/health
 
 ### Optional: local stream (no Kafka)
 
