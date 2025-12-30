@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getWindowDetail, getWindowsLatest } from '../api/endpoints'
-import type { WindowDetail, WindowsLatestResponse } from '../api/types'
+import { getWindowsLatest } from '../api/endpoints'
+import type { WindowsLatestResponse } from '../api/types'
 import { Card } from '../components/Card'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { KeyValueTable } from '../components/KeyValueTable'
-import { RulesList } from '../components/RulesList'
 import { SeverityBadge } from '../components/SeverityBadge'
 import { usePollingQuery } from '../hooks/usePollingQuery'
 import { asArray, asNumber, asString } from '../utils/safe'
@@ -21,7 +20,7 @@ type TimelineItem = {
 function severityTimelineClasses(severity: number | null) {
   if (severity === null) return 'border-slate-200 bg-white hover:bg-slate-50'
   if (severity <= 0) return 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100'
-  if (severity <= 2) return 'border-amber-200 bg-amber-50 hover:bg-amber-100'
+  if (severity === 1) return 'border-amber-200 bg-amber-50 hover:bg-amber-100'
   return 'border-rose-200 bg-rose-50 hover:bg-rose-100'
 }
 
@@ -30,6 +29,65 @@ function formatTsShort(ts: string | null) {
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return ts
   return d.toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatTsTime(ts: string | null) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ts
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function parseDiagnosisFeatures(diagnosis: string | null): Record<string, unknown> {
+  if (!diagnosis) return {}
+
+  const keyMeta: Record<string, { label: string; unit: string }> = {
+    sa_temp_mean: { label: 'Supply Air Temperature Mean', unit: '°C' },
+    sa_temp_mean_minus_sp: { label: 'Supply Air Temperature Mean Minus Setpoint', unit: '°C' },
+    cc_valve_mean: { label: 'Cooling Coil Valve Mean', unit: '%' },
+    avg_zone_temp_mean: { label: 'Average Zone Temperature Mean', unit: '°C' },
+  }
+
+  const allowedKeys = Object.keys(keyMeta)
+  const re = new RegExp(`\\b(${allowedKeys.join('|')})=(-?[0-9]+(?:\\.[0-9]+)?)`, 'g')
+
+  const out: Record<string, unknown> = {}
+  let match: RegExpExecArray | null
+  while ((match = re.exec(diagnosis)) !== null) {
+    const rawKey = match[1]
+    const rawVal = match[2]
+    const meta = keyMeta[rawKey]
+    const label = meta?.label ?? rawKey
+    const n = Number(rawVal)
+    const formatted = Number.isFinite(n) ? n.toFixed(2) : rawVal
+    out[label] = meta?.unit ? `${formatted} ${meta.unit}` : formatted
+  }
+  return out
+}
+
+function formatDuration(startTs: string | null, endTs: string | null) {
+  if (!startTs || !endTs) return '—'
+  const start = new Date(startTs)
+  const end = new Date(endTs)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '—'
+  const minutes = Math.round((end.getTime() - start.getTime()) / 60000)
+  if (!Number.isFinite(minutes) || minutes <= 0) return '—'
+  if (minutes < 60) return `${minutes} minutes`
+  const hours = Math.round((minutes / 60) * 10) / 10
+  return `${hours} hours`
+}
+
+function extractField(text: string | null, key: string) {
+  if (!text) return null
+  const idx = text.indexOf(key)
+  if (idx < 0) return null
+  const rest = text.slice(idx + key.length)
+  const endIdx = Math.min(
+    ...[rest.indexOf(' signature='), rest.indexOf(' anomalies='), rest.indexOf('.'), rest.indexOf('\n')].filter((n) => n >= 0),
+    rest.length,
+  )
+  const value = rest.slice(0, endIdx).trim()
+  return value || null
 }
 
 export function WindowAnalysisPage() {
@@ -57,11 +115,6 @@ export function WindowAnalysisPage() {
   }, [windowsQuery.data])
 
   const [selectedWindowId, setSelectedWindowId] = useState<string | null>(null)
-  const [detailError, setDetailError] = useState<string | null>(null)
-  const [detailLoading, setDetailLoading] = useState<boolean>(false)
-  const [detailById, setDetailById] = useState<Record<string, WindowDetail | null>>({})
-
-  const detailAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!timelineItems.length) {
@@ -85,43 +138,38 @@ export function WindowAnalysisPage() {
     if (!stillExists) setSelectedWindowId(timelineItems[0]!.windowId)
   }, [requestedWindowId, selectedWindowId, timelineItems])
 
-  const selectedDetail = selectedWindowId ? detailById[selectedWindowId] ?? null : null
+  const combinedError = windowsQuery.loading ? null : windowsQuery.error
 
-  useEffect(() => {
-    if (!selectedWindowId) return
-    if (Object.prototype.hasOwnProperty.call(detailById, selectedWindowId)) return
+  const selectedWindow = useMemo(() => {
+    if (!selectedWindowId) return null
+    return timelineItems.find((w) => w.windowId === selectedWindowId) ?? null
+  }, [selectedWindowId, timelineItems])
 
-    setDetailLoading(true)
-    setDetailError(null)
-    detailAbortRef.current?.abort()
-    const controller = new AbortController()
-    detailAbortRef.current = controller
+  const summaryTableData = useMemo(() => {
+    if (!selectedWindowId) return null
 
-    void (async () => {
-      try {
-        const detail = await getWindowDetail(selectedWindowId, controller.signal)
-        if (!controller.signal.aborted) {
-          setDetailById((prev) => ({ ...prev, [selectedWindowId]: detail }))
-        }
-      } catch (err) {
-        if (controller.signal.aborted) return
-        const message = err instanceof Error ? err.message : 'Fetch failed'
-        setDetailError(message)
-        setDetailById((prev) => ({ ...prev, [selectedWindowId]: null }))
-      } finally {
-        if (!controller.signal.aborted) setDetailLoading(false)
-      }
-    })()
+    const diagnosis = selectedWindow?.diagnosis ?? null
+    const anomaliesRaw = extractField(diagnosis, 'anomalies=')
+    const anomalies = anomaliesRaw ? anomaliesRaw.split(',').map((s) => s.trim()).filter(Boolean) : []
 
-    return () => controller.abort()
-  }, [detailById, selectedWindowId])
+    const classification = anomalies.length ? anomalies.join(', ') : (diagnosis ? diagnosis : '—')
 
-  const combinedError = windowsQuery.error || detailError
+    return {
+      'Window ID': selectedWindowId,
+      Duration: formatDuration(selectedWindow?.startTs ?? null, selectedWindow?.endTs ?? null),
+      Classification: classification,
+    }
+  }, [selectedWindow, selectedWindowId])
 
-  const detailSeverity =
-    typeof selectedDetail?.severity === 'number' && !Number.isNaN(selectedDetail.severity)
-      ? selectedDetail.severity
-      : null
+  const extractedFeaturesData = useMemo(() => {
+    const diagnosis = selectedWindow?.diagnosis ?? null
+    const parsed = parseDiagnosisFeatures(diagnosis)
+    if (Object.keys(parsed).length) return parsed
+
+    return null
+  }, [selectedWindow])
+
+  const detailSeverity = selectedWindow?.severity ?? null
 
   return (
     <div className="space-y-6">
@@ -130,7 +178,7 @@ export function WindowAnalysisPage() {
           <div className="text-2xl font-semibold">Window Analysis</div>
           <div className="mt-1 text-sm text-slate-600">Select a window to inspect summary, features, and rules.</div>
         </div>
-        <div>{selectedWindowId ? <SeverityBadge severity={detailSeverity} /> : null}</div>
+        <div>{selectedWindowId && detailSeverity !== null ? <SeverityBadge severity={detailSeverity} /> : null}</div>
       </div>
 
       <ErrorBanner message={combinedError} />
@@ -140,28 +188,26 @@ export function WindowAnalysisPage() {
           <div className="text-sm text-slate-600">Waiting for data…</div>
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {timelineItems.map((w) => {
+            {timelineItems.map((w, idx) => {
               const active = w.windowId === selectedWindowId
+              const displayWindowNumber = timelineItems.length - idx
               return (
                 <button
                   key={w.windowId}
                   type="button"
                   onClick={() => setSelectedWindowId(w.windowId)}
                   className={[
-                    'shrink-0 w-64 rounded-lg border p-3 text-left',
+                    'shrink-0 w-64 rounded-lg border p-3 text-left focus:outline-none',
                     severityTimelineClasses(w.severity),
-                    active ? 'ring-2 ring-slate-900/20' : '',
+                    active ? 'border-slate-900' : '',
                   ].join(' ')}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-slate-900 truncate">{w.windowId}</div>
-                    <SeverityBadge severity={w.severity} />
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-semibold text-slate-900 truncate flex-1">Window {displayWindowNumber}</div>
+                    <span className="flex-none"><SeverityBadge severity={w.severity} /></span>
                   </div>
                   <div className="mt-1 text-xs text-slate-700">
-                    {formatTsShort(w.startTs)}{w.endTs ? ` → ${formatTsShort(w.endTs)}` : ''}
-                  </div>
-                  <div className="mt-2 text-xs text-slate-700">
-                    {w.diagnosis ? w.diagnosis : 'Waiting for data…'}
+                    {formatTsTime(w.startTs)}{w.endTs ? ` → ${formatTsTime(w.endTs)}` : ''}
                   </div>
                 </button>
               )
@@ -172,33 +218,24 @@ export function WindowAnalysisPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="space-y-4">
-          <Card title="Window Summary" right={detailLoading ? <span className="text-xs text-slate-600">Loading…</span> : null}>
-            {selectedWindowId ? (
-              <KeyValueTable data={selectedDetail?.summary ?? null} />
-            ) : (
-              <div className="text-sm text-slate-600">Waiting for data…</div>
-            )}
+          <Card title="Window Summary">
+            {selectedWindowId ? <KeyValueTable data={summaryTableData} /> : <div className="text-sm text-slate-600">Waiting for data…</div>}
           </Card>
 
           <Card title="Extracted Features">
-            {selectedWindowId ? (
-              <KeyValueTable data={selectedDetail?.features ?? null} />
-            ) : (
+            {!selectedWindowId ? (
               <div className="text-sm text-slate-600">Waiting for data…</div>
+            ) : extractedFeaturesData ? (
+              <KeyValueTable data={extractedFeaturesData} />
+            ) : (
+              <div className="text-sm text-slate-600">Work in progress</div>
             )}
           </Card>
         </div>
 
         <div>
-          <Card title="Rule Evaluation">
-            {!selectedWindowId ? (
-              <div className="text-sm text-slate-600">Waiting for data…</div>
-            ) : (
-              <div className="space-y-4">
-                <RulesList title="Failed Rules" rules={selectedDetail?.rules?.failed ?? (selectedDetail as any)?.failed_rules} />
-                <RulesList title="Passed Rules" rules={selectedDetail?.rules?.passed ?? (selectedDetail as any)?.passed_rules} collapsed />
-              </div>
-            )}
+          <Card title="Agent Conclusion (Phase 4+)">
+            <div className="text-sm text-slate-600">This section will populate once agentic reasoning is enabled.</div>
           </Card>
         </div>
       </div>

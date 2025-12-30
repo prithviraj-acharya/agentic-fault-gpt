@@ -8,6 +8,20 @@ export type PollingState<T> = {
   refresh: () => void
 }
 
+function isAbortError(err: unknown): boolean {
+  if (!err) return false
+  if (err instanceof DOMException && err.name === 'AbortError') return true
+  if (err instanceof Error && err.name === 'AbortError') return true
+  if (typeof err === 'object' && err && 'name' in err && (err as any).name === 'AbortError') return true
+  return false
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'object' && err && 'message' in err && typeof (err as any).message === 'string') return (err as any).message
+  return 'Fetch failed'
+}
+
 export function usePollingQuery<T>(
   key: string,
   fetcher: (signal: AbortSignal) => Promise<T>,
@@ -35,8 +49,8 @@ export function usePollingQuery<T>(
       setLastUpdatedAt(Date.now())
     } catch (err) {
       if (controller.signal.aborted) return
-      const message = err instanceof Error ? err.message : 'Fetch failed'
-      setError(message)
+      if (isAbortError(err)) return
+      setError(errorMessage(err))
     } finally {
       if (!controller.signal.aborted) setLoading(false)
     }
