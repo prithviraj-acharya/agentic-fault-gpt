@@ -25,6 +25,7 @@ export function Sidebar() {
       <nav className="px-3 space-y-1">
         <NavItem to="/live" label="Live Monitoring" />
         <NavItem to="/windows" label="Window Analysis" />
+        <NavItem to="/tickets" label="Tickets" />
       </nav>
     </aside>
   )
