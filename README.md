@@ -136,6 +136,22 @@ Health URL:
 
 - http://localhost:8000/api/health
 
+### 6) Frontend Dashboard
+
+With the backend API running, start the frontend dashboard:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Access the dashboard at:
+
+- http://localhost:5173
+
+**Note:** Ensure the backend API is accessible (default: `http://localhost:8000`). Configure via `frontend/.env` if needed.
+
 ### Optional: local stream (no Kafka)
 
 Generate from a scenario and print one JSON event per line (still writes CSV+metadata):
