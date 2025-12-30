@@ -84,7 +84,7 @@ python -m simulation.producer \
 	--bootstrap-servers localhost:9092 \
 	--topic ahu.telemetry \
 	--start-now \
-	--speed 0 \
+	--emit-interval-sec 1 \
 	--out data/generated
 ```
 

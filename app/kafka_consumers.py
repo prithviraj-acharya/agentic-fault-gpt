@@ -106,6 +106,9 @@ class KafkaIngest:
         self.telemetry_store = telemetry_store
         self.window_store = window_store
 
+        replay = bool(getattr(self.settings, "kafka_replay_on_startup", False))
+        self._group_suffix = f"-{int(time.time())}" if replay else ""
+
         self._stop = threading.Event()
         self._threads: list[threading.Thread] = []
 
@@ -139,7 +142,7 @@ class KafkaIngest:
             {
                 "bootstrap.servers": self.settings.kafka_bootstrap_servers,
                 "group.id": group_id,
-                "auto.offset.reset": "latest",
+                "auto.offset.reset": self.settings.kafka_auto_offset_reset,
                 "enable.auto.commit": True,
             }
         )
@@ -147,8 +150,13 @@ class KafkaIngest:
         return c
 
     def _run_telemetry_consumer(self) -> None:
+        prefix = str(
+            getattr(self.settings, "kafka_consumer_group_prefix", "dashboard")
+            or "dashboard"
+        )
         c = self._consumer(
-            group_id="dashboard-telemetry", topics=self.settings.kafka_telemetry_topics
+            group_id=f"{prefix}-telemetry{self._group_suffix}",
+            topics=self.settings.kafka_telemetry_topics,
         )
         if c is None:
             return
@@ -189,8 +197,13 @@ class KafkaIngest:
                 pass
 
     def _run_window_consumer(self) -> None:
+        prefix = str(
+            getattr(self.settings, "kafka_consumer_group_prefix", "dashboard")
+            or "dashboard"
+        )
         c = self._consumer(
-            group_id="dashboard-windows", topics=self.settings.kafka_window_topics
+            group_id=f"{prefix}-windows{self._group_suffix}",
+            topics=self.settings.kafka_window_topics,
         )
         if c is None:
             return

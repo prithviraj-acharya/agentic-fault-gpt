@@ -48,12 +48,15 @@ class TelemetryStore:
         )
 
     def add(self, ahu_id: str, ts: datetime, values: Dict[str, float]) -> None:
-        cutoff = ts - timedelta(minutes=int(self.retention_mins))
         with self._lock:
             series = self._data[str(ahu_id)]
             series.append((ts, dict(values)))
             # Keep sorted for range queries (small buffers; stable for demo).
             series.sort(key=lambda x: x[0])
+            # Retain the last N minutes relative to the newest observed timestamp
+            # (works for both live ingestion and historical replays).
+            newest_ts = series[-1][0]
+            cutoff = newest_ts - timedelta(minutes=int(self.retention_mins))
             # Evict by time
             i = 0
             while i < len(series) and series[i][0] < cutoff:
@@ -81,6 +84,30 @@ class TelemetryStore:
         points = [(ts, vals) for ts, vals in series if from_ts <= ts <= to_ts]
         points = _downsample(points, max_points=int(self.max_points))
 
+        out: List[Dict[str, Any]] = []
+        for ts, vals in points:
+            row: Dict[str, Any] = {"ts": isoformat_z(ts)}
+            for s in signals:
+                v = vals.get(s)
+                if v is not None:
+                    row[s] = float(v)
+            out.append(row)
+        return out
+
+    def last_n(
+        self,
+        ahu_id: str,
+        limit: int,
+        signals: List[str],
+    ) -> List[Dict[str, Any]]:
+        lim = max(int(limit), 0)
+        if lim <= 0:
+            return []
+
+        with self._lock:
+            series = list(self._data.get(str(ahu_id), []))
+
+        points = series[-lim:]
         out: List[Dict[str, Any]] = []
         for ts, vals in points:
             row: Dict[str, Any] = {"ts": isoformat_z(ts)}

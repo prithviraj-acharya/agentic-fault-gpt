@@ -307,6 +307,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--emit-interval-s",
+        "--emit-interval-sec",
         type=float,
         default=None,
         help=(

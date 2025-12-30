@@ -22,11 +22,22 @@ def _env_str(name: str, default: str) -> str:
     return default if raw is None else str(raw)
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or str(raw).strip() == "":
+        return bool(default)
+    s = str(raw).strip().lower()
+    return s in {"1", "true", "yes", "y", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     kafka_bootstrap_servers: str
     kafka_telemetry_topics: List[str]
     kafka_window_topics: List[str]
+    kafka_auto_offset_reset: str
+    kafka_consumer_group_prefix: str
+    kafka_replay_on_startup: bool
 
     telemetry_retention_mins: int
     windows_maxlen: int
@@ -43,6 +54,15 @@ def load_settings() -> Settings:
     bootstrap = _env_str("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
     telemetry_topics = _split_csv(_env_str("KAFKA_TELEMETRY_TOPICS", "ahu.telemetry"))
     window_topics = _split_csv(_env_str("KAFKA_WINDOW_TOPICS", "window_summaries"))
+    auto_offset_reset = _env_str("KAFKA_AUTO_OFFSET_RESET", "earliest").strip().lower()
+    if auto_offset_reset not in {"earliest", "latest"}:
+        auto_offset_reset = "earliest"
+
+    consumer_group_prefix = _env_str("KAFKA_CONSUMER_GROUP_PREFIX", "dashboard").strip()
+    if not consumer_group_prefix:
+        consumer_group_prefix = "dashboard"
+
+    replay_on_startup = _env_bool("KAFKA_REPLAY_ON_STARTUP", False)
 
     telemetry_retention_mins = _env_int("TELEMETRY_RETENTION_MINS", 30)
     windows_maxlen = _env_int("WINDOWS_MAXLEN", 500)
@@ -59,6 +79,9 @@ def load_settings() -> Settings:
         kafka_bootstrap_servers=bootstrap,
         kafka_telemetry_topics=telemetry_topics,
         kafka_window_topics=window_topics,
+        kafka_auto_offset_reset=auto_offset_reset,
+        kafka_consumer_group_prefix=consumer_group_prefix,
+        kafka_replay_on_startup=bool(replay_on_startup),
         telemetry_retention_mins=int(telemetry_retention_mins),
         windows_maxlen=int(windows_maxlen),
         online_threshold_secs=int(online_threshold_secs),
