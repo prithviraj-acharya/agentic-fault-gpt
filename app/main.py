@@ -284,7 +284,11 @@ def create_app() -> FastAPI:
         limit: int = Query(30, ge=1),
         signals: str = Query("sat,rat,valve_pos,fan_speed"),
     ) -> Dict[str, Any]:
-        resolved_ahu = str(ahu_id) if ahu_id else _pick_default_ahu_id(telemetry_store, window_store)
+        resolved_ahu = (
+            str(ahu_id)
+            if ahu_id
+            else _pick_default_ahu_id(telemetry_store, window_store)
+        )
         if not resolved_ahu:
             return {
                 "system_online": False,
@@ -316,7 +320,9 @@ def create_app() -> FastAPI:
         # Pull last N points using actual keys, then remap to requested canonical names.
         lim = min(int(limit), int(settings.max_points))
         actual_keys = [a for _, a in resolved]
-        raw_points = telemetry_store.last_n(resolved_ahu, limit=lim, signals=actual_keys)
+        raw_points = telemetry_store.last_n(
+            resolved_ahu, limit=lim, signals=actual_keys
+        )
 
         points: List[Dict[str, Any]] = []
         for p in raw_points:
