@@ -33,7 +33,7 @@ const TICKETS = [
   },
 ];
 
-const STATUS_OPTIONS = ['All Status', 'Open', 'Closed', 'In Progress'];
+const STATUS_OPTIONS = ['All Status', 'Pending', 'Approved', 'Rejected'];
 const FAULT_TYPE_OPTIONS = ['All Fault Types', 'Cooling', 'Zone', 'Damper'];
 
 import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/solid';
