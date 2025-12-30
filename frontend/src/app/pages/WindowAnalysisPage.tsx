@@ -90,6 +90,33 @@ function extractField(text: string | null, key: string) {
   return value || null
 }
 
+function anomalyToFriendlyCondition(ruleId: string): string {
+  switch (ruleId) {
+    case 'SAT_NOT_DROPPING_WHEN_VALVE_HIGH':
+      return 'Supply air temperature is not dropping despite high cooling demand.'
+    case 'SAT_TOO_HIGH_WHEN_VALVE_HIGH':
+      return 'Supply air temperature is above the setpoint while cooling demand is high.'
+    case 'OA_DAMPER_STUCK_OR_FLATLINE':
+      return 'Outdoor air damper shows near-zero variance (possible stuck or flatline).'
+    case 'RA_DAMPER_STUCK_OR_FLATLINE':
+      return 'Return air damper shows near-zero variance (possible stuck or flatline).'
+    case 'ZONE_TEMP_PERSISTENT_TREND':
+      return 'Average zone temperature shows a sustained upward trend.'
+    case 'ZONE_TEMP_SENSOR_NOISY':
+      return 'Average zone temperature variance is unusually high (possible sensor noise).'
+    case 'MISSING_DATA_HIGH':
+      return 'High missing data ratio in this window.'
+    case 'OUT_OF_RANGE_VALUES':
+      return 'Signals are outside configured bounds.'
+    default:
+      return ruleId
+        .split('_')
+        .map((w) => (w ? w[0]!.toUpperCase() + w.slice(1).toLowerCase() : ''))
+        .join(' ')
+        .trim()
+  }
+}
+
 export function WindowAnalysisPage() {
   const [searchParams] = useSearchParams()
   const requestedWindowId = searchParams.get('window_id')
@@ -152,12 +179,12 @@ export function WindowAnalysisPage() {
     const anomaliesRaw = extractField(diagnosis, 'anomalies=')
     const anomalies = anomaliesRaw ? anomaliesRaw.split(',').map((s) => s.trim()).filter(Boolean) : []
 
-    const classification = anomalies.length ? anomalies.join(', ') : (diagnosis ? diagnosis : '—')
+    const detectedCondition = anomalies.length ? anomalies.map(anomalyToFriendlyCondition).join(' | ') : '—'
 
     return {
       'Window ID': selectedWindowId,
       Duration: formatDuration(selectedWindow?.startTs ?? null, selectedWindow?.endTs ?? null),
-      Classification: classification,
+      'Detected Condition': detectedCondition,
     }
   }, [selectedWindow, selectedWindowId])
 

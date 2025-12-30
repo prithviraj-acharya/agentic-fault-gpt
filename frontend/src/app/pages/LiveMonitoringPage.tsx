@@ -9,6 +9,34 @@ import { SeverityBadge } from '../components/SeverityBadge'
 import { StatCard } from '../components/StatCard'
 import { usePollingQuery } from '../hooks/usePollingQuery'
 import { formatNumber, formatTimeAgo } from '../utils/format'
+
+// Friendly description for anomaly rule IDs (copied from WindowAnalysisPage)
+function anomalyToFriendlyCondition(ruleId: string): string {
+  switch (ruleId) {
+    case 'SAT_NOT_DROPPING_WHEN_VALVE_HIGH':
+      return 'Supply air temperature is not dropping despite high cooling demand.'
+    case 'SAT_TOO_HIGH_WHEN_VALVE_HIGH':
+      return 'Supply air temperature is above the setpoint while cooling demand is high.'
+    case 'OA_DAMPER_STUCK_OR_FLATLINE':
+      return 'Outdoor air damper shows near-zero variance (possible stuck or flatline).'
+    case 'RA_DAMPER_STUCK_OR_FLATLINE':
+      return 'Return air damper shows near-zero variance (possible stuck or flatline).'
+    case 'ZONE_TEMP_PERSISTENT_TREND':
+      return 'Average zone temperature shows a sustained upward trend.'
+    case 'ZONE_TEMP_SENSOR_NOISY':
+      return 'Average zone temperature variance is unusually high (possible sensor noise).'
+    case 'MISSING_DATA_HIGH':
+      return 'High missing data ratio in this window.'
+    case 'OUT_OF_RANGE_VALUES':
+      return 'Signals are outside configured bounds.'
+    default:
+      return ruleId
+        .split('_')
+        .map((w) => (w ? w[0]!.toUpperCase() + w.slice(1).toLowerCase() : ''))
+        .join(' ')
+        .trim()
+  }
+}
 import { Link } from 'react-router-dom'
 
 function OnlineBadge({ online }: { online: boolean | null }) {
@@ -90,7 +118,10 @@ function parseDiagnosticSnapshot(raw: unknown, fallbackStartTs: unknown, fallbac
     ? anomaliesRaw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
     : []
 
-  const fault = anomalies.length ? anomalies.join(', ') : null
+  // Show friendly descriptions for known faults
+  const fault = anomalies.length
+    ? anomalies.map(anomalyToFriendlyCondition).join(' ')
+    : null
 
   const summaryLines: string[] = []
   if (ccValveMean) summaryLines.push(`Cooling valve: ${formatNumber(Number(ccValveMean), 0)}% open`)
@@ -194,7 +225,7 @@ export function LiveMonitoringPage() {
               return (
                 <div className="space-y-4">
                   <div>
-                    <div className="text-xs uppercase tracking-wide text-slate-500">Fault</div>
+                    <div className="text-xs uppercase tracking-wide text-slate-500">Detected Condition</div>
                     <div className="mt-1 text-sm font-medium text-slate-900">
                       {fault ? fault : <span className="text-slate-600">Waiting for data…</span>}
                     </div>
