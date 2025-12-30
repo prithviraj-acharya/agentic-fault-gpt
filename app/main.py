@@ -24,6 +24,14 @@ _SIGNAL_ALIASES: Dict[str, List[str]] = {
     "valve_pos": ["valve_pos", "cc_valve", "cc_valve_pos", "cc_valve_pct"],
     "fan_speed": ["fan_speed", "sa_fan_speed", "sa_fan_speed_pct", "fan_speed_pct"],
     "damper_pos": ["damper_pos", "oa_damper", "oa_damper_pos", "oa_damper_pct"],
+    "oat": [
+        "oat",
+        "oat_c",
+        "oa_temp",
+        "oa_temp_c",
+        "outdoor_air_temp",
+        "outdoor_air_temp_c",
+    ],
 }
 
 
@@ -282,7 +290,7 @@ def create_app() -> FastAPI:
     def live_last(
         ahu_id: Optional[str] = Query(None, min_length=1),
         limit: int = Query(30, ge=1),
-        signals: str = Query("sat,rat,valve_pos,fan_speed"),
+        signals: str = Query("sat,rat,oat,valve_pos,fan_speed"),
     ) -> Dict[str, Any]:
         resolved_ahu = (
             str(ahu_id)

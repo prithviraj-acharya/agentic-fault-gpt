@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { getWindowDetail, getWindowsLatest } from '../api/endpoints'
 import type { WindowDetail, WindowsLatestResponse } from '../api/types'
 import { Card } from '../components/Card'
@@ -32,6 +33,8 @@ function formatTsShort(ts: string | null) {
 }
 
 export function WindowAnalysisPage() {
+  const [searchParams] = useSearchParams()
+  const requestedWindowId = searchParams.get('window_id')
   const windowsQuery = usePollingQuery<WindowsLatestResponse>('windows-latest', (signal) => getWindowsLatest(signal), 5000)
 
   const timelineItems: TimelineItem[] = useMemo(() => {
@@ -65,13 +68,22 @@ export function WindowAnalysisPage() {
       if (selectedWindowId) setSelectedWindowId(null)
       return
     }
+
+    if (requestedWindowId) {
+      const exists = timelineItems.some((w) => w.windowId === requestedWindowId)
+      if (exists && selectedWindowId !== requestedWindowId) {
+        setSelectedWindowId(requestedWindowId)
+        return
+      }
+    }
+
     if (!selectedWindowId) {
       setSelectedWindowId(timelineItems[0]!.windowId)
       return
     }
     const stillExists = timelineItems.some((w) => w.windowId === selectedWindowId)
     if (!stillExists) setSelectedWindowId(timelineItems[0]!.windowId)
-  }, [selectedWindowId, timelineItems])
+  }, [requestedWindowId, selectedWindowId, timelineItems])
 
   const selectedDetail = selectedWindowId ? detailById[selectedWindowId] ?? null : null
 

@@ -7,7 +7,7 @@ function NavItem({ to, label }: { to: string; label: string }) {
       className={({ isActive }: { isActive: boolean }) =>
         [
           'block rounded-md px-3 py-2 text-sm font-medium',
-          isActive ? 'bg-slate-200 text-slate-900' : 'text-slate-700 hover:bg-slate-100',
+          isActive ? 'bg-purple-50 text-purple-900' : 'text-slate-700 hover:bg-slate-100',
         ].join(' ')
       }
     >

@@ -13,6 +13,7 @@ type Point = {
   tsLabel: string
   sat: number | null
   rat: number | null
+  oat: number | null
 }
 
 function toLabel(ts: unknown): string {
@@ -27,11 +28,12 @@ function toLabel(ts: unknown): string {
   return ''
 }
 
-export function LiveChart({ points }: { points: Array<{ ts?: unknown; sat?: unknown; rat?: unknown }> | null }) {
+export function LiveChart({ points }: { points: Array<{ ts?: unknown; sat?: unknown; rat?: unknown; oat?: unknown }> | null }) {
   const data: Point[] = (points ?? []).map((p) => ({
     tsLabel: toLabel(p.ts),
     sat: typeof p.sat === 'number' && !Number.isNaN(p.sat) ? p.sat : null,
     rat: typeof p.rat === 'number' && !Number.isNaN(p.rat) ? p.rat : null,
+    oat: typeof (p as any).oat === 'number' && !Number.isNaN((p as any).oat) ? ((p as any).oat as number) : null,
   }))
 
   if (!data.length) {
@@ -40,7 +42,7 @@ export function LiveChart({ points }: { points: Array<{ ts?: unknown; sat?: unkn
     )
   }
 
-  const hasAnySeriesValue = data.some((p) => p.sat !== null || p.rat !== null)
+  const hasAnySeriesValue = data.some((p) => p.sat !== null || p.rat !== null || p.oat !== null)
   if (!hasAnySeriesValue) {
     return (
       <div className="h-80 flex items-center justify-center text-slate-600">Waiting for SAT/RAT…</div>
@@ -56,8 +58,9 @@ export function LiveChart({ points }: { points: Array<{ ts?: unknown; sat?: unkn
           <YAxis tick={{ fontSize: 12 }} />
           <Tooltip />
           <Legend />
-          <Line type="monotone" dataKey="sat" name="SAT" dot={false} isAnimationActive={false} />
-          <Line type="monotone" dataKey="rat" name="RAT" dot={false} isAnimationActive={false} />
+          <Line type="monotone" dataKey="sat" name="SAT" dot={false} isAnimationActive={false} stroke="#9333ea" strokeWidth={3} />
+          <Line type="monotone" dataKey="rat" name="RAT" dot={false} isAnimationActive={false} stroke="#06b6d4" strokeWidth={3} />
+          <Line type="monotone" dataKey="oat" name="OAT" dot={false} isAnimationActive={false} stroke="#64748b" strokeWidth={3} />
         </LineChart>
       </ResponsiveContainer>
     </div>

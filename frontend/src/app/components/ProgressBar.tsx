@@ -5,7 +5,7 @@ export function ProgressBar({ value }: { value: number | null | undefined }) {
     <div className="w-full">
       <div className="h-2 w-full rounded bg-slate-100">
         <div
-          className="h-2 rounded bg-slate-900"
+          className="h-2 rounded bg-purple-600"
           style={{ width: v === null ? '0%' : `${v}%` }}
         />
       </div>

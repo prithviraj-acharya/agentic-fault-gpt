@@ -17,6 +17,7 @@ export type LiveTimeseriesPoint = {
   ts?: string | number | null
   sat?: number | null
   rat?: number | null
+  oat?: number | null
   valve_pos?: number | null
   fan_speed?: number | null
 }

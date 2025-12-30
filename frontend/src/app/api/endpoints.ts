@@ -7,7 +7,7 @@ import type {
 } from './types'
 
 export function getLiveLast(signal: AbortSignal) {
-  return apiGetJson<LiveLastResponse>('/api/live/last?limit=30&signals=sat,rat,valve_pos,fan_speed', { signal })
+  return apiGetJson<LiveLastResponse>('/api/live/last?limit=30&signals=sat,rat,oat,valve_pos,fan_speed', { signal })
 }
 
 export function getLiveTimeseries(signal: AbortSignal) {

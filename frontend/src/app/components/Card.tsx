@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 
-export function Card({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
+export function Card({ title, children, right }: { title: ReactNode; children: ReactNode; right?: ReactNode }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
