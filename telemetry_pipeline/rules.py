@@ -113,10 +113,18 @@ class RuleEngine:
         if valve is None or slope is None:
             return None
 
+        min_mean_minus_sp = float(p.get("sa_temp_mean_minus_sp_min", 0.0) or 0.0)
+        mean_minus_sp = f.get("sa_temp_mean_minus_sp")
+        if mean_minus_sp is None:
+            mean_minus_sp = 0.0
+        if mean_minus_sp < min_mean_minus_sp:
+            return None
+
         if valve > p["valve_high_pct"] and slope >= p["sat_slope_min"]:
             evidence: Dict[str, Any] = {
                 "cc_valve_mean": valve,
                 "sa_temp_slope": slope,
+                "sa_temp_mean_minus_sp": mean_minus_sp,
                 "thresholds": p,
             }
             delta = f.get("sa_temp_delta")
@@ -186,17 +194,32 @@ class RuleEngine:
             return None
         p = self._params(rule_id)
 
+        sat_minus_sp = f.get("sa_temp_mean_minus_sp")
+        max_sat_minus_sp = p.get("sa_temp_mean_minus_sp_max")
+        if sat_minus_sp is not None and max_sat_minus_sp is not None:
+            try:
+                if float(sat_minus_sp) > float(max_sat_minus_sp):
+                    return None
+            except Exception:
+                pass
+
         slope = f.get("avg_zone_temp_slope")
         if slope is None:
             return None
 
-        if slope > p["zone_slope_high"]:
+        delta = f.get("avg_zone_temp_delta")
+        if delta is None:
+            delta = 0.0
+
+        min_delta = float(p.get("zone_delta_min", 0.0) or 0.0)
+
+        if slope > p["zone_slope_high"] and delta >= min_delta:
             return _trigger(
                 rule_id,
                 self._severity(rule_id),
                 {
                     "avg_zone_temp_slope": slope,
-                    "avg_zone_temp_delta": f.get("avg_zone_temp_delta"),
+                    "avg_zone_temp_delta": delta,
                     "avg_zone_temp_var": f.get("avg_zone_temp_var"),
                     "thresholds": p,
                 },

@@ -49,7 +49,7 @@
       "episode_id": "F002",
       "fault_type": "stuck_damper_fault",
       "start_time": "2025-12-01T13:00:00Z",
-      "end_time": "2025-12-01T14:29:00Z",
+      "end_time": "2025-12-01T14:10:00Z",
       "magnitude": 1.0,
       "target_signals": [
         "oa_damper",
@@ -71,7 +71,7 @@
         "avg_zone_temp"
       ],
       "fault_params": {
-        "drift_c_per_hour": 0.5
+        "drift_c_per_hour": 4.0
       },
       "description": "Average zone temperature sensor slowly drifting upward over time."
     }

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Tuple
 
@@ -14,7 +14,12 @@ from simulation.profiles.cooling_coil_fault import apply_cooling_coil_fault
 from simulation.profiles.normal import NormalProfile
 from simulation.profiles.stuck_damper_fault import apply_stuck_damper_fault
 from simulation.profiles.zone_temp_drift_fault import apply_zone_temp_sensor_drift
-from simulation.utils import FaultEpisode, isoformat_z, validate_scenario
+from simulation.utils import (
+    FaultEpisode,
+    isoformat_z,
+    shift_window_and_episodes_to_start,
+    validate_scenario,
+)
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -134,10 +139,23 @@ def build_metadata(
     }
 
 
-def run_scenario(*, scenario_path: Path, output_dir: Path) -> Dict[str, Path]:
+def run_scenario(
+    *,
+    scenario_path: Path,
+    output_dir: Path,
+    start_now: bool = False,
+) -> Dict[str, Path]:
     scenario, start_time, end_time, interval_sec, episodes = load_and_validate_scenario(
         scenario_path=scenario_path
     )
+
+    if bool(start_now):
+        start_time, end_time, episodes = shift_window_and_episodes_to_start(
+            start_time=start_time,
+            end_time=end_time,
+            episodes=episodes,
+            new_start_time=datetime.now(timezone.utc),
+        )
     signals: List[str] = list(scenario["signals"])
     run_id = str(scenario["run_id"])
 
@@ -192,6 +210,11 @@ def main(argv: List[str] | None = None) -> int:
         type=Path,
         help="Output directory (default: data/generated)",
     )
+    parser.add_argument(
+        "--start-now",
+        action="store_true",
+        help="Shift the scenario window and fault episodes to start at current UTC time (keeps relative offsets)",
+    )
     args = parser.parse_args(argv)
 
     # Resolve relative paths from repo root (current working dir)
@@ -202,7 +225,11 @@ def main(argv: List[str] | None = None) -> int:
     if not out_dir.is_absolute():
         out_dir = Path.cwd() / out_dir
 
-    outputs = run_scenario(scenario_path=scenario_path, output_dir=out_dir)
+    outputs = run_scenario(
+        scenario_path=scenario_path,
+        output_dir=out_dir,
+        start_now=bool(args.start_now),
+    )
     print(f"Wrote telemetry: {outputs['telemetry']}")
     print(f"Wrote metadata: {outputs['metadata']}")
     return 0

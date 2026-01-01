@@ -16,42 +16,11 @@ from simulation.simulator import (
     iter_telemetry_events,
     load_and_validate_scenario,
 )
-from simulation.utils import FaultEpisode, parse_iso8601
-
-
-def _shift_to_start_now(
-    *,
-    start_time: datetime,
-    end_time: datetime,
-    episodes: List[FaultEpisode],
-    new_start_time: datetime,
-) -> tuple[datetime, datetime, List[FaultEpisode]]:
-    """Shift the scenario window and fault episode windows by a constant delta."""
-
-    if new_start_time.tzinfo is None:
-        new_start_time = new_start_time.replace(tzinfo=timezone.utc)
-    new_start_time = new_start_time.astimezone(timezone.utc).replace(microsecond=0)
-
-    delta = new_start_time - start_time
-    shifted_start = new_start_time
-    shifted_end = end_time + delta
-
-    shifted_episodes: List[FaultEpisode] = []
-    for ep in episodes:
-        shifted_episodes.append(
-            FaultEpisode(
-                episode_id=ep.episode_id,
-                fault_type=ep.fault_type,
-                start_time=ep.start_time + delta,
-                end_time=ep.end_time + delta,
-                magnitude=ep.magnitude,
-                target_signals=list(ep.target_signals),
-                fault_params=dict(ep.fault_params),
-                description=ep.description,
-            )
-        )
-
-    return shifted_start, shifted_end, shifted_episodes
+from simulation.utils import (
+    FaultEpisode,
+    parse_iso8601,
+    shift_window_and_episodes_to_start,
+)
 
 
 class EventSink(Protocol):
@@ -397,7 +366,7 @@ def main() -> int:
         )
 
         if bool(args.start_now):
-            start_time, end_time, episodes = _shift_to_start_now(
+            start_time, end_time, episodes = shift_window_and_episodes_to_start(
                 start_time=start_time,
                 end_time=end_time,
                 episodes=episodes,

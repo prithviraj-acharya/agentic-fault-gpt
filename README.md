@@ -66,6 +66,9 @@ Generates the full scenario telemetry CSV + metadata JSON:
 
 ```bash
 python -m simulation.simulator --scenario simulation/scenarios/scenario_v1.json --out data/generated
+
+# Use current time (not time-bound to the scenario's absolute timestamps)
+python -m simulation.simulator --scenario simulation/scenarios/scenario_v1.json --out data/generated --start-now
 ```
 
 Outputs:

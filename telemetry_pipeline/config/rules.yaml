@@ -8,6 +8,9 @@ rules:
     params:
       valve_high_pct: 70
       sat_slope_min: 0.0
+      # Guardrail: avoid flagging during normal control when SAT is at/near setpoint.
+      # Require SAT to be meaningfully above setpoint before checking the "not dropping" symptom.
+      sa_temp_mean_minus_sp_min: 1.0
       # With 300s windows and 60s sampling, expect ~5 samples/window.
       min_samples: 3
 
@@ -48,6 +51,13 @@ rules:
       # Recommended: slope in °C/min.
       # Scenario drift is ~0.5°C/hour ≈ 0.0083°C/min.
       zone_slope_high: 0.005
+      # Guardrail: tiny monotonic trends can happen in baseline noise.
+      # Require a minimum net increase over the window.
+      zone_delta_min: 0.05
+      # Guardrail: avoid mixing this rule with cooling-fault symptoms.
+      # If SAT is far above setpoint, an upward zone trend is more likely due to
+      # insufficient cooling (F001/F002) than sensor drift.
+      sa_temp_mean_minus_sp_max: 1.0
 
   ZONE_TEMP_SENSOR_NOISY:
     enabled: true

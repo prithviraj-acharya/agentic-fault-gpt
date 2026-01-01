@@ -65,6 +65,54 @@ def isoformat_z(dt: datetime) -> str:
     )
 
 
+def shift_window_and_episodes_to_start(
+    *,
+    start_time: datetime,
+    end_time: datetime,
+    episodes: List["FaultEpisode"],
+    new_start_time: datetime,
+) -> Tuple[datetime, datetime, List["FaultEpisode"]]:
+    """Shift the scenario window and fault episode windows by a constant delta.
+
+    This keeps the relative offsets between episodes and the scenario window,
+    but re-anchors the whole run at a new start time (e.g. current time).
+    """
+
+    if new_start_time.tzinfo is None:
+        new_start_time = new_start_time.replace(tzinfo=timezone.utc)
+    new_start_time = new_start_time.astimezone(timezone.utc).replace(microsecond=0)
+
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    start_time = start_time.astimezone(timezone.utc).replace(microsecond=0)
+
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+    end_time = end_time.astimezone(timezone.utc).replace(microsecond=0)
+
+    delta = new_start_time - start_time
+
+    shifted_start = new_start_time
+    shifted_end = end_time + delta
+
+    shifted_episodes: List[FaultEpisode] = []
+    for ep in episodes:
+        shifted_episodes.append(
+            FaultEpisode(
+                episode_id=ep.episode_id,
+                fault_type=ep.fault_type,
+                start_time=ep.start_time + delta,
+                end_time=ep.end_time + delta,
+                magnitude=ep.magnitude,
+                target_signals=list(ep.target_signals),
+                fault_params=dict(ep.fault_params),
+                description=ep.description,
+            )
+        )
+
+    return shifted_start, shifted_end, shifted_episodes
+
+
 @dataclass(frozen=True)
 class FaultEpisode:
     episode_id: str

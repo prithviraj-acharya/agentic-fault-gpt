@@ -17,8 +17,11 @@ export function getLiveTimeseries(signal: AbortSignal) {
   )
 }
 
-export function getWindowsLatest(signal: AbortSignal, limit = 50) {
-  return apiGetJson<WindowsLatestResponse>(`/api/windows/latest?limit=${encodeURIComponent(String(limit))}`, { signal })
+export function getWindowsLatest(signal: AbortSignal, limit?: number) {
+  const qs = typeof limit === 'number' && Number.isFinite(limit)
+    ? `?limit=${encodeURIComponent(String(limit))}`
+    : ''
+  return apiGetJson<WindowsLatestResponse>(`/api/windows/latest${qs}`, { signal })
 }
 
 export function getWindowDetail(windowId: string, signal: AbortSignal) {

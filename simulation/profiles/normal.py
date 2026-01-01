@@ -30,7 +30,8 @@ class NormalConfig:
     zone_temp_tau_sec: float = 45.0 * 60.0  # relax toward setpoint over ~45 min
 
     # Noise scales
-    temp_noise_sigma_c: float = 0.15
+    # Keep baseline fairly stable so rules don't false-trigger in normal operation.
+    temp_noise_sigma_c: float = 0.08
     damper_noise_sigma_pct: float = 1.0
     valve_noise_sigma_pct: float = 1.5
     fan_noise_sigma_pct: float = 0.8
@@ -83,7 +84,7 @@ class NormalProfile:
         self.state.avg_zone_temp_c = float(
             (1.0 - alpha) * self.state.avg_zone_temp_c
             + alpha * cfg.zone_temp_setpoint_c
-            + rng.normal(0.0, cfg.temp_noise_sigma_c * 0.25)
+            + rng.normal(0.0, cfg.temp_noise_sigma_c * 0.10)
         )
         avg_zone_temp_c = float(_clamp(self.state.avg_zone_temp_c, 20.0, 28.0))
 

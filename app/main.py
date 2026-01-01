@@ -353,7 +353,7 @@ def create_app() -> FastAPI:
     @router.get("/windows/latest")
     def windows_latest(
         ahu_id: Optional[str] = Query(None, min_length=1),
-        limit: int = Query(50, ge=1),
+        limit: Optional[int] = Query(None),
     ) -> Dict[str, Any]:
         resolved_ahu = (
             str(ahu_id)
@@ -363,7 +363,19 @@ def create_app() -> FastAPI:
         if not resolved_ahu:
             return {"windows": []}
 
-        lim = min(int(limit), int(settings.max_limit))
+        # Return up to all retained windows by default.
+        # The store holds at most `windows_maxlen` per AHU.
+        if limit is None:
+            lim = int(settings.windows_maxlen)
+        else:
+            try:
+                lim = int(limit)
+            except Exception:
+                lim = int(settings.windows_maxlen)
+
+        if lim <= 0:
+            lim = int(settings.windows_maxlen)
+        lim = min(lim, int(settings.windows_maxlen))
         items = window_store.latest_min_items(resolved_ahu, limit=lim)
         windows = []
         for it in items:
