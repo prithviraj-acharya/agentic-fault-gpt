@@ -38,6 +38,33 @@ Modern Building Management Systems (BMS) generate high-frequency telemetry acros
 
 ---
 
+## 📚 Phase 4: Static Knowledge (Chroma)
+
+Phase 4 builds a **local, persistent** Chroma vector database under `./chroma_db/` from:
+
+- `knowledge/manual/` (PDF manuals)
+- `knowledge/past_cases/past_cases.jsonl` (past cases)
+
+Important:
+
+- `chroma_db/` is a **generated artifact** and is **not tracked in Git**.
+- If you delete `chroma_db/`, you can regenerate it at any time using the scripts below.
+
+Build the indexes (idempotent upserts):
+
+```bash
+python static_layer/build_manuals_index.py
+python static_layer/build_past_cases_index.py
+```
+
+Run the retrieval smoke test:
+
+```bash
+python static_layer/smoke_test.py
+```
+
+---
+
 ## ✅ What You Can Run Today
 
 ### 1) Start Kafka (Docker)

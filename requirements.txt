@@ -15,6 +15,12 @@ pyarrow   # required for parquet
 python-dotenv
 
 # -------------------------------
+# Phase 4 (Static knowledge / Chroma)
+# -------------------------------
+chromadb
+pypdf
+
+# -------------------------------
 # Config
 # -------------------------------
 pyyaml
