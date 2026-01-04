@@ -7,6 +7,7 @@ BITS Pilani Dissertation Project: **"Agentic AI Framework for Building Managemen
 An end-to-end, local-first pipeline for **HVAC telemetry simulation → streaming/windowing → rule-based symptom summaries → (next) retrieval + agentic diagnosis**.
 
 **Quick links:**
+
 - [What you can run today](#what-you-can-run-today)
 - [Project phases (what’s implemented)](#project-phases)
 - [Architecture (high level)](#architecture-high-level)
@@ -19,6 +20,7 @@ An end-to-end, local-first pipeline for **HVAC telemetry simulation → streamin
 Modern Building Management Systems (BMS) generate high-frequency telemetry across HVAC components such as Air Handling Units (AHUs). Traditional diagnostic tools rely on fixed rule chains, which can be brittle and hard to extend. This project explores how **agentic AI** (retrieval-augmented reasoning, context-use, multi-stage inference, and autonomous refinement) can make fault analysis more accurate and explainable.
 
 You can already:
+
 - Simulate AHU telemetry from scenarios (deterministic, repeatable)
 - Stream telemetry locally or to Kafka
 - Generate deterministic window summaries (features + rule-based symptoms)
@@ -30,12 +32,14 @@ You can already:
 ## 🧩 Project Phases
 
 ### 🧪 Phase 2 — Scenario-driven simulation
+
 - Deterministic generation (seeded RNG) to telemetry CSV + metadata JSON
 - Non-overlapping, time-bounded fault episodes
 - Fault injection modules (row modifiers) with optional ramp-in (`ramp_minutes`)
 - Scenario validation (UTC timestamps, episode window containment, basic bounds/type checks)
 
 ### 🪟 Phase 3 — Telemetry pipeline (window summaries)
+
 - Event validation + normalization
 - Deterministic per-AHU ordering + de-dup buffer
 - Tumbling window manager (epoch-aligned)
@@ -45,6 +49,7 @@ You can already:
 - Local JSONL sink (and optional Kafka sink)
 
 ### 🧠 Next phases (planned)
+
 - Retrieval + indexing over manuals and past cases
 - Hierarchical RAG-based diagnostic engine
 - Ticketing layer for explainable maintenance workflows
@@ -100,6 +105,7 @@ python static_layer/smoke_test.py
 ## 🚀 What You Can Run Today
 
 ### 🧰 Prerequisites
+
 - Python environment with dependencies installed: `pip install -r requirements.txt`
 - (Optional) Docker + Docker Compose (for Kafka + API)
 - (Optional) Node.js tooling (for the frontend dashboard)
