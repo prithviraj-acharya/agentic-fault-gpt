@@ -2,8 +2,8 @@
   "run_id": "ahu_sim_run_001",
   "scenario_name": "normal_then_faults_v1",
   "ahu_id": 1,
-  "start_time": "2026-01-01T13:11:57Z",
-  "end_time": "2026-01-01T19:11:57Z",
+  "start_time": "2026-01-04T06:30:30Z",
+  "end_time": "2026-01-04T12:30:30Z",
   "sampling_interval_sec": 60,
   "seed": 42,
   "signals": [
@@ -25,8 +25,8 @@
     {
       "episode_id": "F001",
       "fault_type": "cooling_coil_fault",
-      "start_time": "2026-01-01T14:41:57Z",
-      "end_time": "2026-01-01T16:11:57Z",
+      "start_time": "2026-01-04T08:00:30Z",
+      "end_time": "2026-01-04T09:30:30Z",
       "magnitude": 0.7,
       "target_signals": [
         "cc_valve",
@@ -42,8 +42,8 @@
     {
       "episode_id": "F002",
       "fault_type": "stuck_damper_fault",
-      "start_time": "2026-01-01T17:11:57Z",
-      "end_time": "2026-01-01T18:21:57Z",
+      "start_time": "2026-01-04T10:30:30Z",
+      "end_time": "2026-01-04T11:40:30Z",
       "magnitude": 1.0,
       "target_signals": [
         "oa_damper",
@@ -58,8 +58,8 @@
     {
       "episode_id": "F003",
       "fault_type": "zone_temp_sensor_drift",
-      "start_time": "2026-01-01T18:41:57Z",
-      "end_time": "2026-01-01T19:11:57Z",
+      "start_time": "2026-01-04T12:00:30Z",
+      "end_time": "2026-01-04T12:30:30Z",
       "magnitude": 0.3,
       "target_signals": [
         "avg_zone_temp"
