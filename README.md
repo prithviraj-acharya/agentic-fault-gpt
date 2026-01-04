@@ -1,4 +1,4 @@
-![Dashboard preview](dashboard.png)
+![Dashboard preview](docs/mid-sem/dashboard.png)
 
 # Agentic AI Framework for Building Management Systems
 
