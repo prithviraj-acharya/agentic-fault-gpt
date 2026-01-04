@@ -1,40 +1,72 @@
+![Dashboard preview](dashboard.png)
+
 # Agentic AI Framework for Building Management Systems
 
-This repository contains the implementation for the BITS Pilani Dissertation project  
-**"Agentic AI Framework for Building Management Systems: Towards Intelligent and Autonomous Building Operations."**
+BITS Pilani Dissertation Project: **"Agentic AI Framework for Building Management Systems: Towards Intelligent and Autonomous Building Operations."**
 
-The project aims to develop an agentic AI-based diagnostic pipeline for context-aware fault analysis in HVAC systems, integrating simulation-driven evaluation, reasoning-driven retrieval, and transparent decision workflows.
+An end-to-end, local-first pipeline for **HVAC telemetry simulation → streaming/windowing → rule-based symptom summaries → (next) retrieval + agentic diagnosis**.
+
+**Quick links:**
+- [What you can run today](#what-you-can-run-today)
+- [Project phases (what’s implemented)](#project-phases)
+- [Architecture (high level)](#architecture-high-level)
+- [Static knowledge (Chroma)](#phase-4-static-knowledge-chroma)
 
 ---
 
 ## 🔍 Project Overview
 
-Modern Building Management Systems (BMS) generate high-frequency telemetry across HVAC components such as Air Handling Units (AHUs). Traditional diagnostic tools rely on rule-based logic, limiting adaptability. This project explores how **Agentic AI**—retrieval-augmented reasoning, context-use, multi-stage inference, and autonomous refinement—can enhance diagnostic accuracy and transparency.
+Modern Building Management Systems (BMS) generate high-frequency telemetry across HVAC components such as Air Handling Units (AHUs). Traditional diagnostic tools rely on fixed rule chains, which can be brittle and hard to extend. This project explores how **agentic AI** (retrieval-augmented reasoning, context-use, multi-stage inference, and autonomous refinement) can make fault analysis more accurate and explainable.
 
-### Implemented So Far (Current Repo State)
+You can already:
+- Simulate AHU telemetry from scenarios (deterministic, repeatable)
+- Stream telemetry locally or to Kafka
+- Generate deterministic window summaries (features + rule-based symptoms)
+- Build a local Chroma index for manuals + past cases (Phase 4)
+- Run a small dashboard stack (backend API + Vite frontend)
 
-- Scenario-driven AHU telemetry simulator (Phase 2)
+---
+
+## 🧩 Project Phases
+
+### 🧪 Phase 2 — Scenario-driven simulation
 - Deterministic generation (seeded RNG) to telemetry CSV + metadata JSON
-- Local-first streaming producer (scenario -> event stream, with optional Kafka sink)
-- Fault schedule support via non-overlapping, time-bounded fault episodes
+- Non-overlapping, time-bounded fault episodes
 - Fault injection modules (row modifiers) with optional ramp-in (`ramp_minutes`)
 - Scenario validation (UTC timestamps, episode window containment, basic bounds/type checks)
 
-- Phase 3 telemetry pipeline (window summaries):
-  - Event validation + normalization
-  - Deterministic per-AHU ordering + de-dup buffer
-  - Tumbling window manager (epoch-aligned)
-  - Feature extraction (per-signal stats + cross-signal features)
-  - Rule-based symptom detection (YAML-driven thresholds)
-  - Canonical `window_summary` JSON output with deterministic text summary
-  - Local JSONL sink (and optional Kafka sink)
+### 🪟 Phase 3 — Telemetry pipeline (window summaries)
+- Event validation + normalization
+- Deterministic per-AHU ordering + de-dup buffer
+- Tumbling window manager (epoch-aligned)
+- Feature extraction (per-signal stats + cross-signal features)
+- Rule-based symptom detection (YAML-driven thresholds)
+- Canonical `window_summary` JSON output with deterministic text summary
+- Local JSONL sink (and optional Kafka sink)
 
-### Planned (Next Phases)
-
+### 🧠 Next phases (planned)
 - Retrieval + indexing over manuals and past cases
 - Hierarchical RAG-based diagnostic engine
 - Ticketing layer for explainable maintenance workflows
-- Streamlit dashboard for interactive visualization
+
+---
+
+## 🗺️ Architecture (high level)
+
+```
+Scenario JSON
+	│
+	▼
+Simulator → telemetry CSV + metadata JSON
+	│
+	├─(optional) Producer → Kafka topic: ahu.telemetry
+	│
+	▼
+Telemetry pipeline (validate → order → window → features → rules)
+	│
+	├─ JSONL sink: data/generated/window_summaries.jsonl
+	└─(optional) Kafka topic: window_summaries
+```
 
 ---
 
@@ -65,9 +97,14 @@ python static_layer/smoke_test.py
 
 ---
 
-## ✅ What You Can Run Today
+## 🚀 What You Can Run Today
 
-### 1) Start Kafka (Docker)
+### 🧰 Prerequisites
+- Python environment with dependencies installed: `pip install -r requirements.txt`
+- (Optional) Docker + Docker Compose (for Kafka + API)
+- (Optional) Node.js tooling (for the frontend dashboard)
+
+### 1) 🐳 Start Kafka (Docker)
 
 Start Kafka + Kafka UI:
 
@@ -87,7 +124,7 @@ Create the window summary topic (idempotent):
 powershell -ExecutionPolicy Bypass -File .\scripts\kafka_bootstrap.ps1 -Topic window_summaries
 ```
 
-### 2) Generate telemetry (offline files)
+### 2) 🧾 Generate telemetry (offline files)
 
 Generates the full scenario telemetry CSV + metadata JSON:
 
@@ -103,7 +140,7 @@ Outputs:
 - `data/generated/<run_id>_telemetry.csv`
 - `data/generated/<run_id>_metadata.json`
 
-### 3) Stream telemetry to Kafka
+### 3) 📡 Stream telemetry to Kafka
 
 Streams the scenario events to Kafka topic `ahu.telemetry`:
 
@@ -118,7 +155,7 @@ python -m simulation.producer \
 	--out data/generated
 ```
 
-### 4) Phase 3 window summaries
+### 4) 🪟 Phase 3 window summaries
 
 This runs the full Phase 3 pipeline and writes one `window_summary` JSON object per line.
 
@@ -154,7 +191,7 @@ Notes:
   - `windowing.yaml` (window size/type + ordering + missing data policy)
   - `rules.yaml` (rule thresholds)
 
-### 5) Dashboard backend API (Docker)
+### 5) 🧩 Dashboard backend API (Docker)
 
 Build + run the backend API alongside Kafka:
 
@@ -166,7 +203,7 @@ Health URL:
 
 - http://localhost:8000/api/health
 
-### 6) Frontend Dashboard
+### 6) 🖥️ Frontend Dashboard
 
 With the backend API running, start the frontend dashboard:
 
@@ -182,7 +219,7 @@ Access the dashboard at:
 
 **Note:** Ensure the backend API is accessible (default: `http://localhost:8000`). Configure via `frontend/.env` if needed.
 
-### Optional: local stream (no Kafka)
+### 🧪 Optional: local stream (no Kafka)
 
 Generate from a scenario and print one JSON event per line (still writes CSV+metadata):
 
@@ -198,6 +235,10 @@ python -m simulation.producer --input data/generated/<run_id>_telemetry.csv --mo
 
 - `--mode local` prints one JSON event per line (good for debugging and for piping into other tools)
 - `--speed 1.0` replays at real-time gaps between timestamps; `--speed 0` replays as fast as possible
+
+---
+
+## 🧾 Scenario format
 
 ### Scenario file
 
@@ -228,16 +269,18 @@ Optional per-episode ramp-in:
 
 - `fault_params.ramp_minutes`: linearly scales fault magnitude from 0 → full magnitude over the first N minutes
 
+---
+
 ## 🛠️ Installation & Setup
 
-### 1. Clone the Repository
+### 1) Clone the repository
 
 ```bash
 git clone https://github.com/<your-username>/agentic-fault-gpt.git
 cd agentic-fault-gpt
 ```
 
-### 2. Create a Virtual Environment
+### 2) Create a virtual environment
 
 ```bash
 python -m venv venv
@@ -247,7 +290,7 @@ source venv/bin/activate
 venv\Scripts\Activate.ps1
 ```
 
-### 3. Install Dependencies
+### 3) Install dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -258,7 +301,7 @@ Troubleshooting (Windows):
 - If `python` opens the Microsoft Store, use the venv python directly: `venv\Scripts\python.exe ...`
 - If Kafka consumer/producer complains about `confluent-kafka`, install it: `pip install -r requirements.txt`
 
-### 4. Configure Environment
+### 4) Configure environment
 
 Create a `.env` file (ignored by Git):
 
@@ -269,17 +312,10 @@ LOG_LEVEL=INFO
 
 ---
 
-## 📅 Project Timeline Alignment
+## 📚 Documentation
 
-(Intentionally omitted here to keep the README short.)
-
----
-
-## 📘 Documentation
-
-Simulation specifications and notes: `docs/specifications/simulation/`
-
-Telemetry pipeline specifications (Phase 3): `docs/specifications/telemetry_pipeline/`
+- Simulation specifications: `docs/specifications/simulation/`
+- Telemetry pipeline specifications: `docs/specifications/telemetry_pipeline/`
 
 ---
 
