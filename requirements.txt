@@ -15,6 +15,13 @@ pyarrow   # required for parquet
 python-dotenv
 
 # -------------------------------
+# OpenAI (Embeddings / LLM)
+# -------------------------------
+openai
+httpx
+tenacity
+
+# -------------------------------
 # Phase 4 (Static knowledge / Chroma)
 # -------------------------------
 chromadb

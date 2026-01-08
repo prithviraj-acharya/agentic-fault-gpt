@@ -9,79 +9,24 @@ Both collections live in persistent Chroma at ./chroma_db.
 
 from __future__ import annotations
 
-import hashlib
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
+# Load environment variables for OpenAI
+from dotenv import load_dotenv
 
-class HashEmbeddingFunction:
-    """Deterministic, fully-local embedding based on feature hashing.
+load_dotenv()
 
-    Important: the same embedding function must be used for both indexing and querying.
-    """
+# Use OpenAI embedding function (works for both module/script execution)
+try:
+    # Preferred: supports `python -m static_layer.retrievers`
+    from static_layer.openai_embedder import OpenAIEmbeddingFunction
+except Exception:  # pragma: no cover
+    # Fallback: supports running from within static_layer
+    from openai_embedder import OpenAIEmbeddingFunction
 
-    def __init__(self, dim: int = 1024, seed: str = "hvac-fdd-v1") -> None:
-        self.dim = dim
-        self.seed = seed
-
-    def name(self) -> str:
-        return "hash-embedding-v1"
-
-    def get_config(self) -> dict:
-        return {"dim": self.dim, "seed": self.seed}
-
-    @classmethod
-    def build_from_config(cls, config: dict) -> "HashEmbeddingFunction":
-        return cls(**(config or {}))
-
-    def _tokenize(self, text: str) -> List[str]:
-        text = text.lower()
-        tokens = re.findall(r"[a-z0-9_]+", text)
-        return [t for t in tokens if len(t) >= 2]
-
-    def _hash_to_index_and_sign(self, token: str) -> Tuple[int, int]:
-        h = hashlib.md5((self.seed + "::" + token).encode("utf-8")).hexdigest()
-        val = int(h, 16)
-        idx = val % self.dim
-        sign = 1 if (val >> 1) % 2 == 0 else -1
-        return idx, sign
-
-    def __call__(self, input: List[str]) -> List[List[float]]:
-        vectors: List[List[float]] = []
-        for text in input:
-            vec = [0.0] * self.dim
-            for tok in self._tokenize(text):
-                idx, sign = self._hash_to_index_and_sign(tok)
-                vec[idx] += float(sign)
-            norm_sq = sum(v * v for v in vec)
-            if norm_sq > 0:
-                norm = norm_sq**0.5
-                vec = [v / norm for v in vec]
-            vectors.append(vec)
-        return vectors
-
-    def embed_documents(
-        self,
-        texts: List[str] | None = None,
-        *,
-        input: List[str] | None = None,
-        **_: object,
-    ) -> List[List[float]]:
-        payload = input if input is not None else (texts or [])
-        return self(payload)
-
-    def embed_query(
-        self,
-        text: str | None = None,
-        *,
-        input: str | List[str] | None = None,
-        **_: object,
-    ):
-        payload = input if input is not None else (text or "")
-        if isinstance(payload, list):
-            return self([str(x) for x in payload])
-        return self([str(payload)])[0]
+## HashEmbeddingFunction removed; now using OpenAIEmbeddingFunction
 
 
 def _get_client_and_collections():
@@ -93,17 +38,17 @@ def _get_client_and_collections():
         ) from exc
 
     client = chromadb.PersistentClient(path=str(Path("chroma_db").resolve()))
-    embed_fn = HashEmbeddingFunction(dim=1024)
+    embed_fn = OpenAIEmbeddingFunction()
 
     manuals = client.get_or_create_collection(
         name="manuals",
         metadata={"hnsw:space": "cosine"},
-        embedding_function=embed_fn,
+        embedding_function=cast(Any, embed_fn),
     )
     past_cases = client.get_or_create_collection(
         name="past_cases",
         metadata={"hnsw:space": "cosine"},
-        embedding_function=embed_fn,
+        embedding_function=cast(Any, embed_fn),
     )
     return manuals, past_cases
 

@@ -98,7 +98,11 @@ def _print_results(results: List[Dict[str, Any]], kind: str, top_k: int) -> bool
             page_start = md.get("page_start")
             page_end = md.get("page_end")
             if page_start is not None and page_end is not None:
-                page_range = f"{page_start}-{page_end}"
+                page_range = (
+                    str(page_start)
+                    if str(page_start) == str(page_end)
+                    else f"{page_start}-{page_end}"
+                )
             else:
                 page_range = "N/A"
             prov = (

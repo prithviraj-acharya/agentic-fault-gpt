@@ -12,93 +12,20 @@ This script is idempotent: re-running upserts the same IDs (no duplicates).
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
-# --------- Local embedding (no external APIs, no downloads) ---------
+# Load environment variables for OpenAI
+from dotenv import load_dotenv
 
+load_dotenv()
 
-class HashEmbeddingFunction:
-    """Deterministic, fully-local embedding based on feature hashing.
-
-    This is intentionally simple and demo-friendly. It produces reasonable retrieval
-    when the query and docs share HVAC/FDD terms.
-    """
-
-    def __init__(self, dim: int = 1024, seed: str = "hvac-fdd-v1") -> None:
-        self.dim = dim
-        self.seed = seed
-
-    def name(self) -> str:
-        # Used by Chroma to detect embedding-function conflicts for persisted collections.
-        return "hash-embedding-v1"
-
-    def get_config(self) -> dict:
-        # Keep this stable so the same persisted collection can be re-opened.
-        return {"dim": self.dim, "seed": self.seed}
-
-    @classmethod
-    def build_from_config(cls, config: dict) -> "HashEmbeddingFunction":
-        return cls(**(config or {}))
-
-    def _tokenize(self, text: str) -> List[str]:
-        text = text.lower()
-        # Keep alphanumerics and a few HVAC punctuation patterns.
-        tokens = re.findall(r"[a-z0-9_]+", text)
-        return [t for t in tokens if len(t) >= 2]
-
-    def _hash_to_index_and_sign(self, token: str) -> Tuple[int, int]:
-        h = hashlib.md5((self.seed + "::" + token).encode("utf-8")).hexdigest()
-        val = int(h, 16)
-        idx = val % self.dim
-        sign = 1 if (val >> 1) % 2 == 0 else -1
-        return idx, sign
-
-    def __call__(self, input: List[str]) -> List[List[float]]:  # chroma protocol
-        vectors: List[List[float]] = []
-        for text in input:
-            vec = [0.0] * self.dim
-            for tok in self._tokenize(text):
-                idx, sign = self._hash_to_index_and_sign(tok)
-                vec[idx] += float(sign)
-
-            # L2 normalize
-            norm_sq = sum(v * v for v in vec)
-            if norm_sq > 0:
-                norm = norm_sq**0.5
-                vec = [v / norm for v in vec]
-            vectors.append(vec)
-        return vectors
-
-    # Newer Chroma embedding interface
-    def embed_documents(
-        self,
-        texts: List[str] | None = None,
-        *,
-        input: List[str] | None = None,
-        **_: object,
-    ) -> List[List[float]]:
-        payload = input if input is not None else (texts or [])
-        return self(payload)
-
-    def embed_query(
-        self,
-        text: str | None = None,
-        *,
-        input: str | List[str] | None = None,
-        **_: object,
-    ):
-        payload = input if input is not None else (text or "")
-        # Chroma may pass a list of query texts here; return a batch in that case.
-        if isinstance(payload, list):
-            return self([str(x) for x in payload])
-        return self([str(payload)])[0]
-
+# Use OpenAI embedding function
+from openai_embedder import OpenAIEmbeddingFunction
 
 # --------- PDF extraction ---------
 
@@ -157,6 +84,41 @@ def remove_repeated_headers_footers(pages_text: List[str]) -> str:
 
     # Join pages with a hard separator so headings detection isn't confused.
     return "\n\n".join(cleaned_pages)
+
+
+def remove_repeated_headers_footers_pages(pages_text: List[str]) -> List[str]:
+    """Like remove_repeated_headers_footers(), but returns a list of cleaned pages.
+
+    This lets us preserve page boundaries so we can attach (page_start, page_end)
+    to each chunk for citation.
+    """
+
+    freq: Dict[str, int] = {}
+    for page_text in pages_text:
+        lines = [ln.strip() for ln in page_text.splitlines()]
+        unique = set(ln for ln in lines if ln)
+        for ln in unique:
+            if 0 < len(ln) <= 80:
+                freq[ln] = freq.get(ln, 0) + 1
+
+    n_pages = max(1, len(pages_text))
+    repeated = {ln for ln, c in freq.items() if c / n_pages >= 0.5}
+
+    cleaned_pages: List[str] = []
+    for page_text in pages_text:
+        out_lines: List[str] = []
+        for ln in page_text.splitlines():
+            s = ln.strip()
+            if not s:
+                continue
+            if s in repeated:
+                continue
+            if re.fullmatch(r"\d{1,4}", s):
+                continue
+            out_lines.append(s)
+        cleaned_pages.append("\n".join(out_lines))
+
+    return cleaned_pages
 
 
 def normalize_whitespace(text: str) -> str:
@@ -366,7 +328,12 @@ def join_list(value: Any) -> str:
 
 
 def build_manual_chunk_metadata(
-    doc_meta: Dict[str, Any], chunk_index: int, chunk_type: str
+    doc_meta: Dict[str, Any],
+    chunk_index: int,
+    chunk_type: str,
+    *,
+    page_start: Optional[int] = None,
+    page_end: Optional[int] = None,
 ) -> Dict[str, Any]:
     # Required fields from prompt.
     return {
@@ -384,8 +351,57 @@ def build_manual_chunk_metadata(
         "canonical_topics": join_list(doc_meta.get("canonical_topics")),
         "chunk_index": int(chunk_index),
         "chunk_type": chunk_type,
+        "page_start": page_start,
+        "page_end": page_end,
         "source": "manual",
     }
+
+
+def _normalize_ws_for_match(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").strip())
+
+
+def _build_page_corpus(cleaned_pages: List[str]) -> Tuple[str, List[Tuple[int, int]]]:
+    """Return (corpus, page_spans).
+
+    corpus is all pages joined by single spaces after whitespace normalization.
+    page_spans is a list of (start, end) char offsets into corpus for each page.
+    """
+
+    norm_pages = [_normalize_ws_for_match(p) for p in cleaned_pages]
+    spans: List[Tuple[int, int]] = []
+    cursor = 0
+    parts: List[str] = []
+    for p in norm_pages:
+        if parts:
+            cursor += 1  # join-space
+        start = cursor
+        parts.append(p)
+        cursor += len(p)
+        end = cursor
+        spans.append((start, end))
+    corpus = " ".join(parts)
+    return corpus, spans
+
+
+def _span_to_page_range(
+    span: Tuple[int, int], page_spans: List[Tuple[int, int]]
+) -> Tuple[Optional[int], Optional[int]]:
+    s, e = span
+    if s < 0 or e <= 0 or e <= s:
+        return None, None
+
+    first: Optional[int] = None
+    last: Optional[int] = None
+    for i, (ps, pe) in enumerate(page_spans):
+        if pe <= s:
+            continue
+        if ps >= e:
+            break
+        if first is None:
+            first = i + 1  # 1-based pages
+        last = i + 1
+    return first, last
 
 
 def load_documents_metadata(path: Path) -> List[Dict[str, Any]]:
@@ -428,11 +444,11 @@ def get_chroma_collection(name: str):
         ) from exc
 
     client = chromadb.PersistentClient(path=str(Path("chroma_db").resolve()))
-    embed_fn = HashEmbeddingFunction(dim=1024)
+    embed_fn = OpenAIEmbeddingFunction()
     collection = client.get_or_create_collection(
         name=name,
         metadata={"hnsw:space": "cosine"},
-        embedding_function=embed_fn,
+        embedding_function=cast(Any, embed_fn),
     )
     return collection
 
@@ -442,18 +458,32 @@ def upsert_manual_chunks(
     doc_id: str,
     chunks: List[Tuple[str, str]],
     doc_meta: Dict[str, Any],
+    *,
+    page_corpus: str,
+    page_spans: List[Tuple[int, int]],
 ) -> None:
     ids: List[str] = []
     documents: List[str] = []
     metadatas: List[Dict[str, Any]] = []
 
     for idx, (chunk_text, chunk_type) in enumerate(chunks):
+        chunk_norm = _normalize_ws_for_match(chunk_text)
+        pos = page_corpus.find(chunk_norm) if chunk_norm else -1
+        if pos >= 0:
+            ps, pe = _span_to_page_range((pos, pos + len(chunk_norm)), page_spans)
+        else:
+            ps, pe = None, None
+
         chunk_id = f"{doc_id}::chunk::{idx}"
         ids.append(chunk_id)
         documents.append(chunk_text)
         metadatas.append(
             build_manual_chunk_metadata(
-                doc_meta, chunk_index=idx, chunk_type=chunk_type
+                doc_meta,
+                chunk_index=idx,
+                chunk_type=chunk_type,
+                page_start=ps,
+                page_end=pe,
             )
         )
 
@@ -489,12 +519,25 @@ def main() -> None:
         chunk_tokens, overlap_tokens = get_chunk_params(doc_meta)
 
         pages_text = extract_pdf_pages_text(pdf_path)
-        cleaned = normalize_whitespace(remove_repeated_headers_footers(pages_text))
+        cleaned_pages = [
+            normalize_whitespace(p)
+            for p in remove_repeated_headers_footers_pages(pages_text)
+        ]
+        cleaned = normalize_whitespace("\n\n".join(cleaned_pages))
+
+        page_corpus, page_spans = _build_page_corpus(cleaned_pages)
 
         chunks = chunk_manual_text(
             cleaned, chunk_tokens=chunk_tokens, overlap_tokens=overlap_tokens
         )
-        upsert_manual_chunks(manuals, doc_id=doc_id, chunks=chunks, doc_meta=doc_meta)
+        upsert_manual_chunks(
+            manuals,
+            doc_id=doc_id,
+            chunks=chunks,
+            doc_meta=doc_meta,
+            page_corpus=page_corpus,
+            page_spans=page_spans,
+        )
 
         preview = (
             chunks[0][0][:220].replace("\n", " ")
