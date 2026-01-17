@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import hashlib
 import json
 import logging
@@ -59,6 +60,71 @@ def _compact_text(text: Any, limit: int) -> str:
     return s[: max(0, limit - 3)] + "..."
 
 
+def _normalize_hypothesis_token(x: Any) -> List[str]:
+    """
+    Normalize one anomaly.fault_hypotheses value into a list[str].
+    Handles: str | list[str] | dict | None.
+    """
+    if x is None:
+        return []
+    if isinstance(x, str):
+        # allow comma-separated hypothesis strings
+        parts = [p.strip() for p in x.split(",")]
+        return [p for p in parts if p]
+    if isinstance(x, list):
+        out: List[str] = []
+        for item in x:
+            if isinstance(item, str):
+                s = item.strip()
+                if s:
+                    out.append(s)
+            elif isinstance(item, dict):
+                # if list contains dicts, keep keys as hypothesis names
+                out.extend([str(k).strip() for k in item.keys() if str(k).strip()])
+        return out
+    if isinstance(x, dict):
+        # dict of hypotheses -> scores, keep keys
+        return [str(k).strip() for k in x.keys() if str(k).strip()]
+    return []
+
+
+def _extract_hypotheses(raw: Dict[str, Any]) -> Tuple[List[str], str]:
+    """
+    Return (all_hypotheses, primary_hypothesis) derived from anomalies[*].fault_hypotheses.
+    Primary = most frequent token (tie-break: first seen).
+    """
+    anomalies = raw.get("anomalies")
+    if not isinstance(anomalies, list):
+        return [], ""
+
+    seen_order: List[str] = []
+    counts = collections.Counter()
+
+    for item in anomalies:
+        if not isinstance(item, dict):
+            continue
+        tokens = _normalize_hypothesis_token(item.get("fault_hypotheses"))
+        for t in tokens:
+            counts[t] += 1
+            if t not in seen_order:
+                seen_order.append(t)
+
+    if not counts:
+        return [], ""
+
+    # pick most frequent; tie-break by first seen in anomalies stream
+    max_count = max(counts.values())
+    candidates = [k for k, v in counts.items() if v == max_count]
+    primary = ""
+    for t in seen_order:
+        if t in candidates:
+            primary = t
+            break
+
+    all_h = [t for t in seen_order if t]  # stable ordering
+    return all_h, primary
+
+
 def _build_doc_id(raw: Dict[str, Any]) -> str:
     window_id = str(raw.get("window_id") or "").strip()
     if window_id:
@@ -93,12 +159,9 @@ def _extract_rule_ids(anomalies: Any) -> Tuple[List[str], Optional[float], List[
         if sev is not None:
             max_sev = sev if max_sev is None else max(max_sev, sev)
 
-        msg = (
-            item.get("message")
-            or item.get("symptom")
-            or item.get("fault_hypotheses")
-            or ""
-        )
+        # NOTE: don't stringify raw fault_hypotheses (list/dict) into msg;
+        # keep msg for human-readable text only.
+        msg = item.get("message") or item.get("symptom") or ""
         msg = _compact_text(msg, 80)
 
         parts = []
@@ -131,6 +194,7 @@ def _build_doc_text(raw: Dict[str, Any]) -> str:
     window_id = str(raw.get("window_id") or "").strip()
     ahu_id = str(raw.get("ahu_id") or "").strip()
     signature = str(raw.get("signature") or "").strip()
+    hypotheses, primary = _extract_hypotheses(raw)
 
     time_obj = raw.get("time")
     t = time_obj if isinstance(time_obj, dict) else {}
@@ -141,6 +205,14 @@ def _build_doc_text(raw: Dict[str, Any]) -> str:
     lines.append(
         f"WINDOW: ahu={ahu_id} window_id={window_id} signature={signature} start={start} end={end}"
     )
+
+    # Phase-6/7 keys (make retrieval consistent)
+    if primary:
+        lines.append(f"PRIMARY_HYPOTHESIS: {primary}")
+    if hypotheses:
+        lines.append(f"HYPOTHESES: {', '.join(hypotheses)}")
+    if primary and ahu_id:
+        lines.append(f"INCIDENT_KEY: {ahu_id}|{primary}")
 
     summary = _compact_text(raw.get("text_summary"), 300)
     if summary:
@@ -186,11 +258,18 @@ def _build_metadata(raw: Dict[str, Any]) -> Dict[str, Any]:
     window_id = str(raw.get("window_id") or "").strip()
     ahu_id = str(raw.get("ahu_id") or "").strip()
     signature = str(raw.get("signature") or "").strip()
+    hypotheses, primary = _extract_hypotheses(raw)
 
     time_obj = raw.get("time")
     t = time_obj if isinstance(time_obj, dict) else {}
     start = str(t.get("start") or "").strip()
     end = str(t.get("end") or "").strip()
+
+    # epoch timestamps for easy filtering later
+    start_dt = parse_iso8601(start) if start else None
+    end_dt = parse_iso8601(end) if end else None
+    start_ts = int(start_dt.timestamp()) if start_dt else None
+    end_ts = int(end_dt.timestamp()) if end_dt else None
 
     rule_ids, max_sev, _ = _extract_rule_ids(raw.get("anomalies"))
 
@@ -215,6 +294,11 @@ def _build_metadata(raw: Dict[str, Any]) -> Dict[str, Any]:
         "signature": signature,
         "start": start,
         "end": end,
+        "start_ts": start_ts,
+        "end_ts": end_ts,
+        "fault_hypotheses": ",".join(hypotheses),
+        "primary_fault_hypothesis": primary,
+        "incident_key": f"{ahu_id}|{primary}" if (ahu_id and primary) else "",
         "rule_ids": ",".join(rule_ids),
         "max_severity": max_sev,
         "sample_count": sample_count,

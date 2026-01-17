@@ -66,6 +66,8 @@ def _print_results(results: List[Dict[str, Any]], top_k: int) -> None:
         signature = md.get("signature")
         start = md.get("start")
         end = md.get("end")
+        primary = md.get("primary_fault_hypothesis")
+        incident_key = md.get("incident_key")
         max_sev = md.get("max_severity")
         rule_ids = md.get("rule_ids")
 
@@ -75,6 +77,7 @@ def _print_results(results: List[Dict[str, Any]], top_k: int) -> None:
             f"    signature={signature} | start={start} | end={end} | "
             f"max_severity={max_sev} | rule_ids={rule_ids}"
         )
+        print(f"    primary={primary} | incident_key={incident_key}")
         print("    snippet:")
         print(f"    {_wrap(r.get('text') or '')}")
 

@@ -18,7 +18,7 @@ except Exception:  # pragma: no cover
     from openai_embedder import OpenAIEmbeddingFunction
 
 
-def _get_collection():
+def _get_collection(collection_name: str | None = None):
     try:
         import chromadb  # type: ignore
     except Exception as exc:
@@ -32,7 +32,7 @@ def _get_collection():
     )
     embed_fn = OpenAIEmbeddingFunction(model=settings.openai_embedding_model)
     collection = client.get_or_create_collection(
-        name=settings.chroma_collection,
+        name=collection_name or settings.chroma_collection,
         metadata={"hnsw:space": "cosine"},
         embedding_function=cast(Any, embed_fn),
     )
@@ -64,7 +64,20 @@ def _format_results(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
 def retrieve_window_history(
     query: str, top_k: int = 5, where: Optional[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
-    collection = _get_collection()
+    collection = _get_collection(collection_name="window_history")
+    raw = collection.query(
+        query_texts=[query],
+        n_results=top_k,
+        where=where,
+        include=["documents", "metadatas", "distances"],
+    )
+    return _format_results(raw)
+
+
+def retrieve_incident_history(
+    query: str, top_k: int = 5, where: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
+    collection = _get_collection(collection_name="incident_history")
     raw = collection.query(
         query_texts=[query],
         n_results=top_k,
