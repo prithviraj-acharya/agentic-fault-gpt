@@ -17,7 +17,7 @@ Run:
 Tip (recommended):
   Set a dedicated smoke DB path so you don't mix with real runs:
     Windows PowerShell:
-      $env:TICKETS_DB_PATH="diagnostic_agent/db/tickets_smoke.db"
+            $env:TICKETS_DB_PATH="data/tickets_smoke.db"
       python -m diagnostic_agent.db.smoke_test_db
 """
 

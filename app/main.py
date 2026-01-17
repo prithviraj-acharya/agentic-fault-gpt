@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.tickets import router as tickets_router
 from app.config import Settings, load_settings
 from app.kafka_consumers import KafkaIngest
 from app.stores import (
@@ -124,6 +125,7 @@ def create_app() -> FastAPI:
     app.state.ingest = ingest
 
     router = APIRouter(prefix="/api")
+    router.include_router(tickets_router)
 
     @router.get("/health")
     def health() -> Dict[str, Any]:
