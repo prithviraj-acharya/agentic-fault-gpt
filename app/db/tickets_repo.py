@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable
@@ -61,6 +62,14 @@ def _safe_like(value: str) -> str:
     return s
 
 
+def _json_dump_if_needed(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value)
+
+
 @dataclass(frozen=True)
 class TicketListResult:
     items: list[dict[str, Any]]
@@ -75,6 +84,21 @@ class TicketRepository:
         conn = tickets_db.connect(self._db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _generate_ticket_ref(self, conn: sqlite3.Connection) -> str:
+        for _ in range(10):
+            candidate = f"TCK-{uuid.uuid4().hex[:4].upper()}"
+            row = conn.execute(
+                "SELECT 1 FROM tickets WHERE ticket_ref = ?",
+                (candidate,),
+            ).fetchone()
+            if row is None:
+                return candidate
+        raise RuntimeError("Unable to generate unique ticket_ref")
+
+    def init_db(self) -> None:
+        with self._connect():
+            pass
 
     def get_ticket(self, ticket_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
@@ -182,6 +206,151 @@ class TicketRepository:
         return TicketListResult(
             items=[dict(r) for r in rows], total=(total if total >= 0 else len(rows))
         )
+
+    def create_ticket(self, ticket: dict[str, Any]) -> dict[str, Any]:
+        missing = [key for key in ("ahu_id", "detected_fault_type") if not ticket.get(key)]
+        if missing:
+            raise ValueError(f"Missing required fields: {', '.join(missing)}")
+
+        now = _utc_now_iso()
+        payload = dict(ticket)
+        payload.setdefault("ticket_id", str(uuid.uuid4()))
+        payload.setdefault("incident_key", f"{payload['ahu_id']}|{payload['detected_fault_type']}")
+        payload.setdefault("lifecycle_status", "OPEN")
+        payload.setdefault("diagnosis_status", "DRAFT")
+        payload.setdefault("review_status", "NONE")
+        payload.setdefault("window_refs", "[]")
+        payload.setdefault("signatures_seen", "[]")
+        payload.setdefault("evidence_ids", "[]")
+        payload.setdefault("created_at", now)
+        payload.setdefault("last_seen_at", now)
+        payload.setdefault("updated_at", now)
+
+        if "lifecycle_status" in payload:
+            _ensure_status(payload["lifecycle_status"], ALLOWED_LIFECYCLE_STATUS, "lifecycle_status")
+        if "diagnosis_status" in payload:
+            _ensure_status(payload["diagnosis_status"], ALLOWED_DIAGNOSIS_STATUS, "diagnosis_status")
+        if "review_status" in payload:
+            _ensure_status(payload["review_status"], ALLOWED_REVIEW_STATUS, "review_status")
+
+        if "recommended_actions" in payload:
+            payload["recommended_actions"] = _json_dump_if_needed(
+                payload.get("recommended_actions")
+            )
+        if "evidence_ids" in payload:
+            payload["evidence_ids"] = _json_dump_if_needed(payload.get("evidence_ids")) or "[]"
+
+        with self._connect() as conn:
+            if not payload.get("ticket_ref"):
+                payload["ticket_ref"] = self._generate_ticket_ref(conn)
+            columns = [col for col in payload.keys() if col in TICKET_COLUMNS]
+            if not columns:
+                raise ValueError("No valid ticket fields provided")
+            values = [payload[col] for col in columns]
+            placeholders = ", ".join(["?"] * len(columns))
+            column_sql = ", ".join(columns)
+            sql = f"INSERT INTO tickets ({column_sql}) VALUES ({placeholders})"
+            conn.execute(sql, values)
+        return self.get_ticket(payload["ticket_id"])  # type: ignore[return-value]
+
+    def upsert_ticket(self, ticket: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        ticket_id = ticket.get("ticket_id")
+        if not ticket_id:
+            raise ValueError("ticket_id is required")
+
+        now = _utc_now_iso()
+        created = False
+
+        with self._connect() as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM tickets WHERE ticket_id = ?",
+                (ticket_id,),
+            ).fetchone()
+
+            if exists:
+                update_fields = {
+                    key: value
+                    for key, value in ticket.items()
+                    if key in TICKET_COLUMNS
+                    and key
+                    not in {
+                        "ticket_id",
+                        "ticket_ref",
+                        "incident_key",
+                        "created_at",
+                    }
+                    and value is not None
+                }
+
+                if "lifecycle_status" in update_fields:
+                    _ensure_status(update_fields["lifecycle_status"], ALLOWED_LIFECYCLE_STATUS, "lifecycle_status")
+                if "diagnosis_status" in update_fields:
+                    _ensure_status(update_fields["diagnosis_status"], ALLOWED_DIAGNOSIS_STATUS, "diagnosis_status")
+                if "review_status" in update_fields:
+                    _ensure_status(update_fields["review_status"], ALLOWED_REVIEW_STATUS, "review_status")
+
+                if "recommended_actions" in update_fields:
+                    update_fields["recommended_actions"] = _json_dump_if_needed(
+                        update_fields["recommended_actions"]
+                    )
+                if "evidence_ids" in update_fields:
+                    update_fields["evidence_ids"] = _json_dump_if_needed(
+                        update_fields["evidence_ids"]
+                    )
+
+                update_fields["updated_at"] = now
+
+                if update_fields:
+                    set_clause = ", ".join([f"{key} = ?" for key in update_fields.keys()])
+                    params = list(update_fields.values()) + [ticket_id]
+                    conn.execute(
+                        f"UPDATE tickets SET {set_clause} WHERE ticket_id = ?",
+                        params,
+                    )
+            else:
+                payload = dict(ticket)
+                missing = [key for key in ("ahu_id", "detected_fault_type") if not payload.get(key)]
+                if missing:
+                    raise ValueError(f"Missing required fields: {', '.join(missing)}")
+
+                payload.setdefault("ticket_ref", self._generate_ticket_ref(conn))
+                payload.setdefault("incident_key", f"{payload['ahu_id']}|{payload['detected_fault_type']}")
+                payload.setdefault("lifecycle_status", "OPEN")
+                payload.setdefault("diagnosis_status", "DRAFT")
+                payload.setdefault("review_status", "NONE")
+                payload.setdefault("window_refs", "[]")
+                payload.setdefault("signatures_seen", "[]")
+
+                payload["evidence_ids"] = _json_dump_if_needed(payload.get("evidence_ids")) or "[]"
+                payload["recommended_actions"] = _json_dump_if_needed(
+                    payload.get("recommended_actions")
+                )
+
+                payload.setdefault("created_at", now)
+                payload.setdefault("last_seen_at", payload.get("created_at", now))
+                payload.setdefault("updated_at", payload.get("created_at", now))
+
+                if "lifecycle_status" in payload:
+                    _ensure_status(payload["lifecycle_status"], ALLOWED_LIFECYCLE_STATUS, "lifecycle_status")
+                if "diagnosis_status" in payload:
+                    _ensure_status(payload["diagnosis_status"], ALLOWED_DIAGNOSIS_STATUS, "diagnosis_status")
+                if "review_status" in payload:
+                    _ensure_status(payload["review_status"], ALLOWED_REVIEW_STATUS, "review_status")
+
+                columns = [col for col in payload.keys() if col in TICKET_COLUMNS]
+                values = [payload[col] for col in columns]
+                placeholders = ", ".join(["?"] * len(columns))
+                column_sql = ", ".join(columns)
+                conn.execute(
+                    f"INSERT INTO tickets ({column_sql}) VALUES ({placeholders})",
+                    values,
+                )
+                created = True
+
+        row = self.get_ticket(ticket_id)
+        if row is None:
+            raise KeyError(f"Ticket not found: {ticket_id}")
+        return row, created
 
     def update_review(
         self,

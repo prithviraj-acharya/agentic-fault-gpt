@@ -1,63 +1,184 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { ConfidenceBar, StatusBadge } from '../components/TicketTableWidgets';
 import { ArrowRightIcon } from '@heroicons/react/20/solid';
 
-const TICKETS = [
-  {
-    id: 'TCK-001',
-    fault: 'SAT_NOT_DROPPING_WHEN_VALVE_HIGH',
-    location: 'AHU 1',
-    confidence: 92,
-    created: '2025-12-30 17:25',
-    status: 'Pending',
-    faultType: 'Cooling',
-  },
-  {
-    id: 'TCK-002',
-    fault: 'ZONE_TEMP_DRIFT',
-    location: 'Zone 3',
-    confidence: 78,
-    created: '2025-12-29 14:10',
-    status: 'Approved',
-    faultType: 'Zone',
-  },
-  {
-    id: 'TCK-003',
-    fault: 'STUCK_DAMPER',
-    location: 'AHU 2',
-    confidence: 63,
-    created: '2025-12-28 09:45',
-    status: 'Rejected',
-    faultType: 'Damper',
-  },
-];
+type TicketApi = {
+  ticket_id: string;
+  ticket_ref: string;
+  ahu_id: string;
+  detected_fault_type: string;
+  lifecycle_status: 'OPEN' | 'RESOLVED' | string;
+  diagnosis_status: 'DRAFT' | 'DIAGNOSING' | 'DIAGNOSED' | 'FAILED' | string;
+  review_status: 'NONE' | 'APPROVED' | 'REJECTED' | string;
+  confidence?: number | null;
+  created_at: string;
+  updated_at: string;
+};
 
-const STATUS_OPTIONS = ['All Status', 'Pending', 'Approved', 'Rejected'];
-const FAULT_TYPE_OPTIONS = ['All Fault Types', 'Cooling', 'Zone', 'Damper'];
+type TicketListResponse = {
+  items: TicketApi[];
+  limit: number;
+  offset: number;
+  total: number;
+};
+
+type TicketMetricsResponse = {
+  active_count: number;
+  awaiting_review_count: number;
+  approved_count: number;
+  rejected_count: number;
+  high_confidence_count: number;
+};
+
+function formatDateTime(value: string): string {
+  if (!value) return '';
+  // Handle ISO strings with microseconds (Python) by trimming beyond milliseconds.
+  let normalized = value.includes('.') ? value.replace(/\.(\d{3})\d+/, '.$1') : value;
+  // If no timezone, treat as UTC (backend emits UTC with no offset)
+  if (!/Z|[+-]\d{2}:?\d{2}$/.test(normalized)) {
+    normalized += 'Z';
+  }
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
+const STATUS_OPTIONS = ['All Review', 'Awaiting Review', 'Approved', 'Rejected'] as const;
+const FAULT_TYPE_OPTIONS = ['All Fault Types', 'Cooling', 'Zone', 'Damper'] as const;
 
 import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/solid';
 
 export function TicketsPage() {
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('All Status');
-  const [faultType, setFaultType] = useState('All Fault Types');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const filtered = TICKETS.filter((t) => {
-    const matchesSearch =
-      t.id.toLowerCase().includes(search.toLowerCase()) ||
-      t.fault.toLowerCase().includes(search.toLowerCase()) ||
-      t.location.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = status === 'All Status' || t.status === status;
-    const matchesFaultType = faultType === 'All Fault Types' || t.faultType === faultType;
-    return matchesSearch && matchesStatus && matchesFaultType;
-  });
+  // Initialize from URL params
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [status, setStatus] = useState<(typeof STATUS_OPTIONS)[number]>(
+    (searchParams.get('status') as (typeof STATUS_OPTIONS)[number]) || 'All Review'
+  );
+  const [faultType, setFaultType] = useState(
+    searchParams.get('faultType') || 'All Fault Types'
+  );
+
+  const [tickets, setTickets] = useState<TicketApi[]>([]);
+  const [metrics, setMetrics] = useState<TicketMetricsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL ?? '';
+
+  const reviewStatusParam = useMemo(() => {
+    if (status === 'All Review') return undefined;
+    if (status === 'Awaiting Review') return 'NONE';
+    if (status === 'Approved') return 'APPROVED';
+    if (status === 'Rejected') return 'REJECTED';
+    return undefined;
+  }, [status]);
+
+  const qParam = useMemo(() => {
+    const trimmed = search.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }, [search]);
+
+  const faultTypeParam = useMemo(() => {
+    if (faultType === 'All Fault Types') return undefined;
+    // Keep existing dropdown values but pass through as backend "fault_type" filter.
+    return faultType;
+  }, [faultType]);
+
+  // Sync state to URL params
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (search) params.q = search;
+    if (status && status !== 'All Review') params.status = status;
+    if (faultType && faultType !== 'All Fault Types') params.faultType = faultType;
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, status, faultType]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const fetchAll = async () => {
+      try {
+        setError(null);
+        const params = new URLSearchParams();
+        params.set('limit', '200');
+        params.set('offset', '0');
+        params.set('sort', 'updated_at');
+        params.set('order', 'desc');
+        if (reviewStatusParam) params.set('review_status', reviewStatusParam);
+        if (faultTypeParam) params.set('fault_type', faultTypeParam);
+        if (qParam) params.set('q', qParam);
+
+        const [listRes, metricsRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/tickets?${params.toString()}`),
+          fetch(`${API_BASE_URL}/api/tickets/metrics`),
+        ]);
+
+        if (!listRes.ok) {
+          throw new Error(`Tickets fetch failed (${listRes.status})`);
+        }
+        if (!metricsRes.ok) {
+          throw new Error(`Metrics fetch failed (${metricsRes.status})`);
+        }
+
+        const listJson = (await listRes.json()) as TicketListResponse;
+        const metricsJson = (await metricsRes.json()) as TicketMetricsResponse;
+        if (cancelled) return;
+        setTickets(Array.isArray(listJson.items) ? listJson.items : []);
+        setMetrics(metricsJson);
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.message ?? 'Failed to load tickets');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchAll();
+    timer = window.setInterval(fetchAll, 5000);
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [API_BASE_URL, reviewStatusParam, faultTypeParam, qParam]);
+
+  const rows = useMemo(() => {
+    return tickets.map((t) => {
+      const confidencePct = Math.max(0, Math.min(100, Math.round((Number(t.confidence ?? 0) || 0) * 100)));
+      return {
+        ticket_id: t.ticket_id,
+        ticket_ref: t.ticket_ref,
+        fault: t.detected_fault_type,
+        location: t.ahu_id,
+        confidencePct,
+        updated: formatDateTime(t.updated_at),
+        lifecycle_status: t.lifecycle_status,
+        review_status: t.review_status,
+      };
+    });
+  }, [tickets]);
 
   return (
     <div className="space-y-6 px-6">
-      <div className="bg-red-50 border border-red-200 text-red-800 rounded px-4 py-2 text-sm mb-2">
-        <strong>Demo:</strong> This page is currently static and displays dummy data only.
-      </div>
+      {error && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-900 rounded px-4 py-2 text-sm mb-2">
+          <strong>Error:</strong> {error}
+        </div>
+      )}
       {/* Header Title Bar */}
       <div className="flex items-center justify-between pt-6 pb-2">
         <div className="text-2xl font-semibold text-slate-900">Ticket Management</div>
@@ -67,11 +188,11 @@ export function TicketsPage() {
       <div className="flex gap-6">
         <div className="flex-1 rounded-lg bg-white shadow-sm border border-slate-200 p-5 flex flex-col items-start">
           <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Awaiting Review</div>
-          <div className="text-3xl font-bold text-slate-900">2</div>
+          <div className="text-3xl font-bold text-slate-900">{metrics?.awaiting_review_count ?? (loading ? '…' : 0)}</div>
         </div>
         <div className="flex-1 rounded-lg bg-white shadow-sm border border-slate-200 p-5 flex flex-col items-start">
           <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">High Confidence Tickets</div>
-          <div className="text-3xl font-bold text-slate-900">2</div>
+          <div className="text-3xl font-bold text-slate-900">{metrics?.high_confidence_count ?? (loading ? '…' : 0)}</div>
         </div>
       </div>
 
@@ -97,7 +218,7 @@ export function TicketsPage() {
             <select
               className="appearance-none border border-slate-200 rounded pl-8 pr-6 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-200"
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
+              onChange={(e) => setStatus(e.target.value as (typeof STATUS_OPTIONS)[number])}
             >
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>{s}</option>
@@ -135,39 +256,46 @@ export function TicketsPage() {
               <th className="px-4 py-2 border-b font-semibold text-left align-middle">Ticket ID</th>
               <th className="px-4 py-2 border-b font-semibold text-left align-middle">Fault Name + Location</th>
               <th className="px-4 py-2 border-b font-semibold text-left align-middle">Confidence</th>
-              <th className="px-4 py-2 border-b font-semibold text-left align-middle">Created</th>
+              <th className="px-4 py-2 border-b font-semibold text-left align-middle">Updated</th>
               <th className="px-4 py-2 border-b font-semibold text-left align-middle">Status</th>
               <th className="px-2 py-2 border-b font-semibold text-left align-middle"></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center text-slate-500 py-6">No tickets found.</td>
               </tr>
             ) : (
-              filtered.map((t) => {
-                let confidenceNum = Number(t.confidence);
-                if (isNaN(confidenceNum)) confidenceNum = 0;
+              rows.map((t) => {
+                // Preserve filters in navigation
+                const params = new URLSearchParams();
+                if (search) params.set('q', search);
+                if (status && status !== 'All Review') params.set('status', status);
+                if (faultType && faultType !== 'All Fault Types') params.set('faultType', faultType);
+                const detailUrl = `/tickets/${t.ticket_id}?${params.toString()}`;
                 return (
                   <tr
-                    key={t.id}
+                    key={t.ticket_id}
                     className="border-b last:border-b-0 hover:bg-slate-50 transition cursor-pointer group"
-                    onClick={() => window.location.href = `/tickets/${t.id}`}
+                    onClick={() => navigate(detailUrl)}
                   >
                     <td className="px-4 py-2 font-mono text-sm align-middle">
-                      <Link to={`/tickets/${t.id}`} className="text-purple-700 hover:underline">{t.id}</Link>
+                      <Link to={detailUrl} className="text-purple-700 hover:underline">{t.ticket_ref}</Link>
                     </td>
                     <td className="px-4 py-2 text-sm align-middle">
                       <div className="font-medium text-slate-900 leading-tight">{t.fault}</div>
                       <div className="text-xs text-slate-500 leading-tight">{t.location}</div>
                     </td>
                     <td className="px-4 py-2 align-middle">
-                      <ConfidenceBar value={confidenceNum} />
+                      <ConfidenceBar value={t.confidencePct} />
                     </td>
-                    <td className="px-4 py-2 text-sm align-middle">{t.created}</td>
+                    <td className="px-4 py-2 text-sm align-middle">{t.updated}</td>
                     <td className="px-4 py-2 align-middle">
-                      <StatusBadge status={t.status} />
+                      <div className="flex flex-col gap-1 items-start">
+                        <StatusBadge status={t.lifecycle_status} />
+                        <StatusBadge status={t.review_status} />
+                      </div>
                     </td>
                     <td className="px-2 py-2 align-middle text-right">
                       <ArrowRightIcon className="w-5 h-5 text-slate-400 group-hover:text-purple-600 inline-block align-middle" />

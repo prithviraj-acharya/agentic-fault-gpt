@@ -70,6 +70,36 @@ class MetricsResponse(BaseModel):
     high_confidence_count: int
 
 
+class TicketUpsertRequest(BaseModel):
+    ticket_id: str
+    ahu_id: Optional[str] = None
+    detected_fault_type: Optional[str] = None
+    symptom_summary: Optional[str] = None
+
+    lifecycle_status: Optional[str] = None
+    diagnosis_status: Optional[str] = None
+    review_status: Optional[str] = None
+
+    confidence: Optional[float] = None
+    diagnosis_title: Optional[str] = None
+    root_cause: Optional[str] = None
+    recommended_actions: Optional[Any] = None
+
+    evidence_ids: Optional[List[str]] = None
+
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    last_seen_at: Optional[str] = None
+    diagnosed_at: Optional[str] = None
+    resolved_at: Optional[str] = None
+
+    review_notes: Optional[str] = None
+
+
+class TicketUpsertResponse(Ticket):
+    created: bool
+
+
 def _ticket_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
     # Normalize JSON-ish DB columns into JSON-friendly API types.
     out = dict(row)
@@ -150,6 +180,25 @@ def list_tickets(
         "offset": int(offset),
         "total": int(result.total),
     }
+
+
+@router.post("/upsert", response_model=TicketUpsertResponse)
+def upsert_ticket(body: TicketUpsertRequest) -> Dict[str, Any]:
+    repo = TicketRepository()
+    try:
+        row, created = repo.upsert_ticket(body.model_dump(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400, detail={"error": "bad_request", "message": str(exc)}
+        ) from exc
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404, detail={"error": "ticket_not_found"}
+        ) from exc
+
+    out = _ticket_from_row(row)
+    out["created"] = created
+    return out
 
 
 @router.get("/{ticket_id}", response_model=Ticket)

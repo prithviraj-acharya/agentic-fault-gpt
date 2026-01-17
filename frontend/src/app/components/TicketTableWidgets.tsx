@@ -15,21 +15,66 @@ export function ConfidenceBar({ value }: { value: number }) {
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  const normalized = String(status ?? '').trim();
+  const key = normalized.toUpperCase();
+
+  const labelMap: Record<string, string> = {
+    // Review (backend)
+    NONE: 'Awaiting Review',
+    APPROVED: 'Approved',
+    REJECTED: 'Rejected',
+
+    // Diagnosis (backend)
+    DRAFT: 'Draft',
+    DIAGNOSING: 'Diagnosing',
+    DIAGNOSED: 'Diagnosed',
+    FAILED: 'Failed',
+
+    // Lifecycle (backend)
+    OPEN: 'Open',
+    RESOLVED: 'Resolved',
+
+    // Legacy/extra (safe fallbacks)
+    PENDING: 'Pending',
+    UNDIAGNOSED: 'Undiagnosed',
+    ACKNOWLEDGED: 'Acknowledged',
+    ESCALATED: 'Escalated',
+    CLOSED: 'Closed',
+  };
+
   // Use exact hex codes for background/text
-  let style = {};
-  if (status === 'Pending') {
-    style = { backgroundColor: '#fffbeb', color: '#b45309' };
-  } else if (status === 'Approved') {
-    style = { backgroundColor: '#f0fdf4', color: '#15803d' };
-  } else if (status === 'Rejected') {
-    style = { backgroundColor: '#fef2f2', color: '#b91c1c' };
-  }
+  const styleMap: Record<string, { backgroundColor: string; color: string }> = {
+    // Review
+    NONE: { backgroundColor: '#fffbeb', color: '#b45309' },
+    APPROVED: { backgroundColor: '#f0fdf4', color: '#15803d' },
+    REJECTED: { backgroundColor: '#fef2f2', color: '#b91c1c' },
+
+    // Diagnosis
+    DRAFT: { backgroundColor: '#f1f5f9', color: '#334155' },
+    DIAGNOSING: { backgroundColor: '#eff6ff', color: '#1d4ed8' },
+    DIAGNOSED: { backgroundColor: '#f0fdf4', color: '#15803d' },
+    FAILED: { backgroundColor: '#fef2f2', color: '#b91c1c' },
+
+    // Lifecycle
+    OPEN: { backgroundColor: '#eff6ff', color: '#1d4ed8' },
+    RESOLVED: { backgroundColor: '#f1f5f9', color: '#334155' },
+
+    // Legacy/extra
+    PENDING: { backgroundColor: '#fffbeb', color: '#b45309' },
+    UNDIAGNOSED: { backgroundColor: '#f1f5f9', color: '#334155' },
+    ACKNOWLEDGED: { backgroundColor: '#eef2ff', color: '#4338ca' },
+    ESCALATED: { backgroundColor: '#fff7ed', color: '#c2410c' },
+    CLOSED: { backgroundColor: '#f1f5f9', color: '#334155' },
+  };
+
+  const style = styleMap[key] ?? { backgroundColor: '#f1f5f9', color: '#334155' };
+  const label = labelMap[key] ?? normalized;
   return (
     <span
       className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
       style={style}
     >
-      {status}
+      {label}
     </span>
   );
 }
