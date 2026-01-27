@@ -1,0 +1,396 @@
+PHASE 4 RETRIEVAL DEMO — Chroma KB Smoke Test
+Collections: manuals (static docs) + past_cases (historical incidents)
+
+================================================================================================
+Q1: fault_type=COOLING_COIL_FAULT
+rules=SAT_TOO_HIGH_WHEN_VALVE_HIGH, SAT_NOT_DROPPING_WHEN_VALVE_HIGH
+Supply air temperature remains high despite cooling valve command near max; SAT not dropping to setpoint under high cooling demand.
+
+  Manuals (Top 3)
+  → Static engineering references (diagnosis + procedures) with doc provenance
+
+    #1  id=ASHRAE_GUIDELINE::chunk::57
+        distance=0.3088  score=0.764
+        doc_id=ASHRAE_GUIDELINE | file=Ashrae-Guideline.pdf | chunk_index=57 | pages=25
+        snippet:
+        Diagnosis SAT sensor error Cooling coil valve stuck closed or actuator failure Fouled or
+      undersized cooling coil CHW temperature too low or CHW unavailable DX cooling
+      unavailable Gas or electric heat stuck on Heating coil valve leaking or stuck open ©
+      ASHRAE. ...
+
+    #2  id=ASHRAE_GUIDELINE::chunk::29
+        distance=0.3137  score=0.761
+        doc_id=ASHRAE_GUIDELINE | file=Ashrae-Guideline.pdf | chunk_index=29 | pages=13
+        snippet:
+        Diagnosis SAT sensor error MAT sensor error Cooling coil valve stuck closed or actuator
+      failure Fouled or undersized cooling coil CHW temperature too high or CHW unavailable
+      DX cooling unavailable Gas or electric heat stuck on Heating coil valve leaking or
+      stu...
+
+    #3  id=ASHRAE_GUIDELINE::chunk::30
+        distance=0.3175  score=0.759
+        doc_id=ASHRAE_GUIDELINE | file=Ashrae-Guideline.pdf | chunk_index=30 | pages=14
+        snippet:
+        Diagnosis SAT sensor error Cooling coil valve stuck closed or actuator failure Fouled or
+      undersized cooling coil CHW temperature too high or CHW unavailable DX cooling
+      unavailable Gas or electric heat stuck on Heating coil valve leaking or stuck open
+      FC#14 Equ...
+
+  Past Cases (Top 3)
+  → Historical incident snippets (what happened + what fixed it) with case provenance
+
+    #1  id=CASE_008
+        distance=0.2478  score=0.801
+        case_id=CASE_008 | fault_type=cooling_coil
+        snippet:
+        CASE_ID: CASE_008 FAULT: cooling_coil TITLE: Valve Compensation Near Saturation (Cooling
+      Underperformance) SYMPTOMS: cc_valve remains near maximum for extended
+      duration|sa_temp fails to reach sa_temp_sp during peak load|avg_zone_temp rises
+      despite increased co...
+
+    #2  id=CASE_006
+        distance=0.2889  score=0.776
+        case_id=CASE_006 | fault_type=cooling_coil
+        snippet:
+        CASE_ID: CASE_006 FAULT: cooling_coil TITLE: Cooling Coil Effectiveness Reduced (Valve High,
+      SAT Not Meeting Setpoint) SYMPTOMS: cc_valve rises to high levels but sa_temp remains
+      above sa_temp_sp|avg_zone_temp gradually increases during the episode|cooling res...
+
+    #3  id=CASE_009
+        distance=0.2984  score=0.770
+        case_id=CASE_009 | fault_type=cooling_coil
+        snippet:
+        CASE_ID: CASE_009 FAULT: cooling_coil TITLE: Airflow-Limited Cooling (Fan Up, Cooling Still
+      Weak) SYMPTOMS: sa_fan_speed elevated but sa_temp remains above sa_temp_sp|cc_valve
+      increases without proportional SAT improvement|cooling appears limited by heat
+      trans...
+
+  ✅ PASS: Retrieved from BOTH collections
+================================================================================================
+Q2: fault_type=OA_DAMPER_STUCK
+rules=OA_DAMPER_STUCK_OR_FLATLINE
+economizer ineffective; outside air damper position flatlines despite command changes; mixed air does not reflect outdoor air influence.
+
+  Manuals (Top 3)
+  → Static engineering references (diagnosis + procedures) with doc provenance
+
+    #1  id=NIST_TN_1831::chunk::26
+        distance=0.4158  score=0.706
+        doc_id=NIST_TN_1831 | file=NIST.TN.1831.pdf | chunk_index=26 | pages=26-27
+        snippet:
+        MIXING BOX FAULT DETECTION RESULTS If the Recirculating Air damper is stuck in an open
+      position, the mixing box controller will try to adjust the inlet and exhaust dampers
+      to compens ate and maintain the supply air temperature setpoint . The charts in Figure
+      1...
+
+    #2  id=NIST_TN_1831::chunk::29
+        distance=0.4244  score=0.702
+        doc_id=NIST_TN_1831 | file=NIST.TN.1831.pdf | chunk_index=29 | pages=27-28
+        snippet:
+        15.6 ˚C and Ti is below (approximately) -5 ˚C, However, while it m ay be difficult to detect
+      a stuck recirculation air damper fault under the above conditions, it is still likely
+      that this type of fault will sooner or later be detected since Ti will vary over ...
+
+    #3  id=ASHRAE_GUIDELINE::chunk::15
+        distance=0.4447  score=0.692
+        doc_id=ASHRAE_GUIDELINE | file=Ashrae-Guideline.pdf | chunk_index=15 | pages=6
+        snippet:
+        Damper Position #1: Heating > 0 = 0 = 0% #2: Free cooling, modulating OA = 0 = 0 0% < x <
+      100% #3: Mechanical + economizer cooling = 0 > 0 = 100% #4: Mechanical cooling,
+      minimum OA = 0 > 0 = 0% #5: Unknown or dehumidification No other OS applies Figure
+      5.16.14...
+
+  Past Cases (Top 3)
+  → Historical incident snippets (what happened + what fixed it) with case provenance
+
+    #1  id=CASE_001
+        distance=0.2538  score=0.798
+        case_id=CASE_001 | fault_type=stuck_damper
+        snippet:
+        CASE_ID: CASE_001 FAULT: stuck_damper TITLE: Outside Air Damper Stuck Closed (Economizer
+      Ineffective) SYMPTOMS: ma_temp remains close to ra_temp despite changes in
+      oa_damper|sa_temp stays above sa_temp_sp; cooling demand persists|cc_valve opens
+      higher than exp...
+
+    #2  id=CASE_002
+        distance=0.2698  score=0.788
+        case_id=CASE_002 | fault_type=stuck_damper
+        snippet:
+        CASE_ID: CASE_002 FAULT: stuck_damper TITLE: Outside Air Damper Stuck Open (Over-Ventilation
+      / Unstable Mixed Air) SYMPTOMS: oa_damper remains high and ma_temp trends toward
+      oa_temp|sa_temp becomes harder to control; cc_valve opens aggressively to maintain
+      sa_...
+
+    #3  id=CASE_004
+        distance=0.2841  score=0.779
+        case_id=CASE_004 | fault_type=stuck_damper
+        snippet:
+        CASE_ID: CASE_004 FAULT: stuck_damper TITLE: Outside Air Damper Partially Jammed (Reduced
+      Authority) SYMPTOMS: oa_damper responds slightly but ma_temp response is weaker than
+      expected|sa_temp approaches sa_temp_sp slowly; cc_valve remains elevated|mixed air
+      co...
+
+  ✅ PASS: Retrieved from BOTH collections
+================================================================================================
+Q3: fault_type=RA_DAMPER_STUCK
+rules=RA_DAMPER_STUCK_OR_FLATLINE
+mixed air temperature tracks return air; return air damper appears stuck or not modulating; MAT follows RAT over time.
+
+  Manuals (Top 3)
+  → Static engineering references (diagnosis + procedures) with doc provenance
+
+    #1  id=NIST_TN_1831::chunk::26
+        distance=0.4016  score=0.713
+        doc_id=NIST_TN_1831 | file=NIST.TN.1831.pdf | chunk_index=26 | pages=26-27
+        snippet:
+        MIXING BOX FAULT DETECTION RESULTS If the Recirculating Air damper is stuck in an open
+      position, the mixing box controller will try to adjust the inlet and exhaust dampers
+      to compens ate and maintain the supply air temperature setpoint . The charts in Figure
+      1...
+
+    #2  id=NIST_TN_1831::chunk::29
+        distance=0.4303  score=0.699
+        doc_id=NIST_TN_1831 | file=NIST.TN.1831.pdf | chunk_index=29 | pages=27-28
+        snippet:
+        15.6 ˚C and Ti is below (approximately) -5 ˚C, However, while it m ay be difficult to detect
+      a stuck recirculation air damper fault under the above conditions, it is still likely
+      that this type of fault will sooner or later be detected since Ti will vary over ...
+
+    #3  id=NIST_TN_1831::chunk::31
+        distance=0.4372  score=0.696
+        doc_id=NIST_TN_1831 | file=NIST.TN.1831.pdf | chunk_index=31 | pages=28-29
+        snippet:
+        TaSP = 10˚C -8 -6 -4 -2 -10 -8 -6 -4 -2 0 2 4 6 8 10 TsObservedError °C) Ti (°C) TaSP =
+      10˚C, Dif = 60% TaSP = 15.6˚C, Dif = 60% Error = -1.7˚C Error = +1.7˚C When the inlet
+      and exhaust dampers are both stuck open, the mixing box controller will try to adjust
+      ...
+
+  Past Cases (Top 3)
+  → Historical incident snippets (what happened + what fixed it) with case provenance
+
+    #1  id=CASE_003
+        distance=0.2721  score=0.786
+        case_id=CASE_003 | fault_type=stuck_damper
+        snippet:
+        CASE_ID: CASE_003 FAULT: stuck_damper TITLE: Return Air Damper Stuck Open (Mixed Air Tracks
+      Return Air) SYMPTOMS: ma_temp closely tracks ra_temp across multiple windows|oa_damper
+      changes have minimal effect on ma_temp|economizer benefit is lost; cc_valve compe...
+
+    #2  id=CASE_002
+        distance=0.3353  score=0.749
+        case_id=CASE_002 | fault_type=stuck_damper
+        snippet:
+        CASE_ID: CASE_002 FAULT: stuck_damper TITLE: Outside Air Damper Stuck Open (Over-Ventilation
+      / Unstable Mixed Air) SYMPTOMS: oa_damper remains high and ma_temp trends toward
+      oa_temp|sa_temp becomes harder to control; cc_valve opens aggressively to maintain
+      sa_...
+
+    #3  id=CASE_004
+        distance=0.3459  score=0.743
+        case_id=CASE_004 | fault_type=stuck_damper
+        snippet:
+        CASE_ID: CASE_004 FAULT: stuck_damper TITLE: Outside Air Damper Partially Jammed (Reduced
+      Authority) SYMPTOMS: oa_damper responds slightly but ma_temp response is weaker than
+      expected|sa_temp approaches sa_temp_sp slowly; cc_valve remains elevated|mixed air
+      co...
+
+  ✅ PASS: Retrieved from BOTH collections
+================================================================================================
+Q4: fault_type=ZONE_TEMP_SENSOR_DRIFT
+rules=ZONE_TEMP_PERSISTENT_TREND
+avg_zone_temp shows persistent drift or trend while supply air temperature remains normal; possible zone temperature sensor bias or calibration drift.
+
+  Manuals (Top 3)
+  → Static engineering references (diagnosis + procedures) with doc provenance
+
+    #1  id=NIST_TN_1831::chunk::42
+        distance=0.4712  score=0.680
+        doc_id=NIST_TN_1831 | file=NIST.TN.1831.pdf | chunk_index=42 | pages=33
+        snippet:
+        FAULT IN ENTERING AIR TEMPERATURE SENSOR Figures 27 and 28 show the predicted value of Tao =
+      TempAirOutAAA for an Error of +4 ˚C and a -4 ˚C, respectively, in the entering air
+      temperature sensor, Tai, for a chilled water temperature of 3.34 ˚C and a plf = 1 .
+      ...
+
+    #2  id=NIST_TN_1831::chunk::33
+        distance=0.4744  score=0.678
+        doc_id=NIST_TN_1831 | file=NIST.TN.1831.pdf | chunk_index=33 | pages=30
+        snippet:
+        DETECTION OF FAULT IN CHILLED WATER TEMPERATURE SENSOR For a fault involving a positive
+      error in the chilled water temperature sensor, the actual chilled water temperature
+      will be lower than the sensor reading . When the calculated chilled water flow rate,
+      MFR...
+
+    #3  id=NIST_TN_1831::chunk::37
+        distance=0.4766  score=0.677
+        doc_id=NIST_TN_1831 | file=NIST.TN.1831.pdf | chunk_index=37 | pages=31
+        snippet:
+        DETECTION OF FAULT IN SUPPLY AIR TEMPERATURE SENSOR For a fault involving a positive error
+      in the supply air temperature sensor, inserting the calculated chilled water flow
+      rate, MFRchwA (based upon the actual (correct) leaving air temperature (TaoSP - error
+      i...
+
+  Past Cases (Top 3)
+  → Historical incident snippets (what happened + what fixed it) with case provenance
+
+    #1  id=CASE_011
+        distance=0.2536  score=0.798
+        case_id=CASE_011 | fault_type=sensor_drift
+        snippet:
+        CASE_ID: CASE_011 FAULT: sensor_drift TITLE: Zone Temperature Sensor Drift Downward (Zones
+      ‘Look Cold’, Overcooling Risk) SYMPTOMS: avg_zone_temp trends downward while SAT
+      control remains stable|cooling appears stronger than needed given zone
+      feedback|control ...
+
+    #2  id=CASE_010
+        distance=0.2594  score=0.794
+        case_id=CASE_010 | fault_type=sensor_drift
+        snippet:
+        CASE_ID: CASE_010 FAULT: sensor_drift TITLE: Zone Temperature Sensor Drift Upward (Control
+      Appears Normal, Zones ‘Look Hot’) SYMPTOMS: avg_zone_temp trends upward without
+      corresponding degradation in sa_temp control|cc_valve behavior appears reasonable for
+      sa_...
+
+    #3  id=CASE_012
+        distance=0.2751  score=0.784
+        case_id=CASE_012 | fault_type=sensor_drift
+        snippet:
+        CASE_ID: CASE_012 FAULT: sensor_drift TITLE: Faster Zone Sensor Drift (Detected Late,
+      Persistent Comfort Complaints) SYMPTOMS: avg_zone_temp shifts noticeably over a short
+      period (accelerated drift)|SAT control remains largely normal; anomalies mainly appear
+      i...
+
+  ✅ PASS: Retrieved from BOTH collections
+================================================================================================
+Q5: fault_type=COOLING_COIL_FAULT
+rules=SAT_NOT_DROPPING_WHEN_VALVE_HIGH
+cooling coil effectiveness reduced; chilled water valve near maximum but SAT remains elevated; insufficient heat transfer or flow issue.
+
+  Manuals (Top 3)
+  → Static engineering references (diagnosis + procedures) with doc provenance
+
+    #1  id=ASHRAE_GUIDELINE::chunk::57
+        distance=0.3037  score=0.767
+        doc_id=ASHRAE_GUIDELINE | file=Ashrae-Guideline.pdf | chunk_index=57 | pages=25
+        snippet:
+        Diagnosis SAT sensor error Cooling coil valve stuck closed or actuator failure Fouled or
+      undersized cooling coil CHW temperature too low or CHW unavailable DX cooling
+      unavailable Gas or electric heat stuck on Heating coil valve leaking or stuck open ©
+      ASHRAE. ...
+
+    #2  id=ASHRAE_GUIDELINE::chunk::30
+        distance=0.3076  score=0.765
+        doc_id=ASHRAE_GUIDELINE | file=Ashrae-Guideline.pdf | chunk_index=30 | pages=14
+        snippet:
+        Diagnosis SAT sensor error Cooling coil valve stuck closed or actuator failure Fouled or
+      undersized cooling coil CHW temperature too high or CHW unavailable DX cooling
+      unavailable Gas or electric heat stuck on Heating coil valve leaking or stuck open
+      FC#14 Equ...
+
+    #3  id=ASHRAE_GUIDELINE::chunk::29
+        distance=0.3176  score=0.759
+        doc_id=ASHRAE_GUIDELINE | file=Ashrae-Guideline.pdf | chunk_index=29 | pages=13
+        snippet:
+        Diagnosis SAT sensor error MAT sensor error Cooling coil valve stuck closed or actuator
+      failure Fouled or undersized cooling coil CHW temperature too high or CHW unavailable
+      DX cooling unavailable Gas or electric heat stuck on Heating coil valve leaking or
+      stu...
+
+  Past Cases (Top 3)
+  → Historical incident snippets (what happened + what fixed it) with case provenance
+
+    #1  id=CASE_008
+        distance=0.2403  score=0.806
+        case_id=CASE_008 | fault_type=cooling_coil
+        snippet:
+        CASE_ID: CASE_008 FAULT: cooling_coil TITLE: Valve Compensation Near Saturation (Cooling
+      Underperformance) SYMPTOMS: cc_valve remains near maximum for extended
+      duration|sa_temp fails to reach sa_temp_sp during peak load|avg_zone_temp rises
+      despite increased co...
+
+    #2  id=CASE_006
+        distance=0.2611  score=0.793
+        case_id=CASE_006 | fault_type=cooling_coil
+        snippet:
+        CASE_ID: CASE_006 FAULT: cooling_coil TITLE: Cooling Coil Effectiveness Reduced (Valve High,
+      SAT Not Meeting Setpoint) SYMPTOMS: cc_valve rises to high levels but sa_temp remains
+      above sa_temp_sp|avg_zone_temp gradually increases during the episode|cooling res...
+
+    #3  id=CASE_009
+        distance=0.2820  score=0.780
+        case_id=CASE_009 | fault_type=cooling_coil
+        snippet:
+        CASE_ID: CASE_009 FAULT: cooling_coil TITLE: Airflow-Limited Cooling (Fan Up, Cooling Still
+      Weak) SYMPTOMS: sa_fan_speed elevated but sa_temp remains above sa_temp_sp|cc_valve
+      increases without proportional SAT improvement|cooling appears limited by heat
+      trans...
+
+  ✅ PASS: Retrieved from BOTH collections
+================================================================================================
+Q6: fault_type=OA_DAMPER_STUCK
+rules=OA_DAMPER_STUCK_OR_FLATLINE
+damper linkage/actuator inspection procedure; outside air damper not responding to control signal; verify actuator, linkage binding, and position feedback.
+
+  Manuals (Top 3)
+  → Static engineering references (diagnosis + procedures) with doc provenance
+
+    #1  id=CLCH_SVX010E_EN_08152024::chunk::214
+        distance=0.4120  score=0.708
+        doc_id=CLCH_SVX010E_EN_08152024 | file=CLCH-SVX010E-EN_08152024.pdf | chunk_index=214 | pages=60
+        snippet:
+        7. Damper actuators (if so equi pped): Stroke the actuators to observe full open and full
+      closure of dampers. Adjust the actuator and/or linkage to prevent “over-stroking” so
+      excessive pressure is not placed on the damper at the full open or full closed
+      positi...
+
+    #2  id=CLCH_SVX010E_EN_08152024::chunk::99
+        distance=0.4121  score=0.708
+        doc_id=CLCH_SVX010E_EN_08152024 | file=CLCH-SVX010E-EN_08152024.pdf | chunk_index=99 | pages=30
+        snippet:
+        Control Dampers If the damper actuators are not factory mounted install damper actuators and
+      connecting linkage. Check damper operation and linkage alignment. Damper blades should
+      be non-binding. Adjust damper frame as necessary to ensure free blade movement.
+
+    #3  id=YORK_XT_AU_IO_MANUAL::chunk::13
+        distance=0.4136  score=0.707
+        doc_id=YORK_XT_AU_IO_MANUAL | file=York-XT-AU-IO-Manual.pdf | chunk_index=13 | pages=15
+        snippet:
+        LD09636a • Ensure the damper linkage is tight and is in the correct power off position. • If
+      the return air dampers are closed, loosen the actuator or crank arm on the jackshaft,
+      open the dampers, and retighten the actuator or crank arm. • Verify the following...
+
+  Past Cases (Top 3)
+  → Historical incident snippets (what happened + what fixed it) with case provenance
+
+    #1  id=CASE_004
+        distance=0.2721  score=0.786
+        case_id=CASE_004 | fault_type=stuck_damper
+        snippet:
+        CASE_ID: CASE_004 FAULT: stuck_damper TITLE: Outside Air Damper Partially Jammed (Reduced
+      Authority) SYMPTOMS: oa_damper responds slightly but ma_temp response is weaker than
+      expected|sa_temp approaches sa_temp_sp slowly; cc_valve remains elevated|mixed air
+      co...
+
+    #2  id=CASE_001
+        distance=0.2894  score=0.776
+        case_id=CASE_001 | fault_type=stuck_damper
+        snippet:
+        CASE_ID: CASE_001 FAULT: stuck_damper TITLE: Outside Air Damper Stuck Closed (Economizer
+      Ineffective) SYMPTOMS: ma_temp remains close to ra_temp despite changes in
+      oa_damper|sa_temp stays above sa_temp_sp; cooling demand persists|cc_valve opens
+      higher than exp...
+
+    #3  id=CASE_002
+        distance=0.2921  score=0.774
+        case_id=CASE_002 | fault_type=stuck_damper
+        snippet:
+        CASE_ID: CASE_002 FAULT: stuck_damper TITLE: Outside Air Damper Stuck Open (Over-Ventilation
+      / Unstable Mixed Air) SYMPTOMS: oa_damper remains high and ma_temp trends toward
+      oa_temp|sa_temp becomes harder to control; cc_valve opens aggressively to maintain
+      sa_...
+
+  ✅ PASS: Retrieved from BOTH collections
+
+================================================================================================
+Summary: 6/6 queries retrieved results from both collections.
+Done.

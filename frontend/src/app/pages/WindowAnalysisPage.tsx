@@ -260,11 +260,7 @@ export function WindowAnalysisPage() {
           </Card>
         </div>
 
-        <div>
-          <Card title="Agent Conclusion (Phase 4+)">
-            <div className="text-sm text-slate-600">This section will populate once agentic reasoning is enabled.</div>
-          </Card>
-        </div>
+        
       </div>
     </div>
   )

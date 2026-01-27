@@ -29,14 +29,24 @@ except Exception:  # pragma: no cover
     # Fallback: allows `python static_layer/smoke_test.py` from repo root
     from retrievers import retrieve_manuals, retrieve_past_cases
 
+# QUERIES = [
+#     "SAT not tracking setpoint cc_valve high",
+#     "mixed air temperature tracks return air damper",
+#     "economizer ineffective oa damper stuck",
+#     "avg_zone_temp drift but sat normal",
+#     "cooling coil effectiveness reduced valve near max",
+#     "damper linkage actuator inspection procedure",
+# ]
+
 QUERIES = [
-    "SAT not tracking setpoint cc_valve high",
-    "mixed air temperature tracks return air damper",
-    "economizer ineffective oa damper stuck",
-    "avg_zone_temp drift but sat normal",
-    "cooling coil effectiveness reduced valve near max",
-    "damper linkage actuator inspection procedure",
+    "fault_type=COOLING_COIL_FAULT\nrules=SAT_TOO_HIGH_WHEN_VALVE_HIGH, SAT_NOT_DROPPING_WHEN_VALVE_HIGH\nSupply air temperature remains high despite cooling valve command near max; SAT not dropping to setpoint under high cooling demand.",
+    "fault_type=OA_DAMPER_STUCK\nrules=OA_DAMPER_STUCK_OR_FLATLINE\neconomizer ineffective; outside air damper position flatlines despite command changes; mixed air does not reflect outdoor air influence.",
+    "fault_type=RA_DAMPER_STUCK\nrules=RA_DAMPER_STUCK_OR_FLATLINE\nmixed air temperature tracks return air; return air damper appears stuck or not modulating; MAT follows RAT over time.",
+    "fault_type=ZONE_TEMP_SENSOR_DRIFT\nrules=ZONE_TEMP_PERSISTENT_TREND\navg_zone_temp shows persistent drift or trend while supply air temperature remains normal; possible zone temperature sensor bias or calibration drift.",
+    "fault_type=COOLING_COIL_FAULT\nrules=SAT_NOT_DROPPING_WHEN_VALVE_HIGH\ncooling coil effectiveness reduced; chilled water valve near maximum but SAT remains elevated; insufficient heat transfer or flow issue.",
+    "fault_type=OA_DAMPER_STUCK\nrules=OA_DAMPER_STUCK_OR_FLATLINE\ndamper linkage/actuator inspection procedure; outside air damper not responding to control signal; verify actuator, linkage binding, and position feedback.",
 ]
+
 
 WRAP_WIDTH = 92
 

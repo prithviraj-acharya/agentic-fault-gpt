@@ -28,6 +28,7 @@ class Ticket(BaseModel):
     review_status: str
 
     confidence: Optional[float] = None
+    occurrence_count: int = 0
 
     created_at: str
     updated_at: str
@@ -35,6 +36,7 @@ class Ticket(BaseModel):
     diagnosed_at: Optional[str] = None
     resolved_at: Optional[str] = None
 
+    last_window_id: Optional[str] = None
     last_window_end_ts: Optional[int] = None
 
     diagnosis_title: Optional[str] = None
@@ -81,6 +83,7 @@ class TicketUpsertRequest(BaseModel):
     review_status: Optional[str] = None
 
     confidence: Optional[float] = None
+    occurrence_count: Optional[int] = None
     diagnosis_title: Optional[str] = None
     root_cause: Optional[str] = None
     recommended_actions: Optional[Any] = None
@@ -92,6 +95,8 @@ class TicketUpsertRequest(BaseModel):
     last_seen_at: Optional[str] = None
     diagnosed_at: Optional[str] = None
     resolved_at: Optional[str] = None
+
+    last_window_id: Optional[str] = None
 
     review_notes: Optional[str] = None
 

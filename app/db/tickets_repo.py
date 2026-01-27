@@ -22,6 +22,7 @@ TICKET_COLUMNS = {
     "lifecycle_status",
     "diagnosis_status",
     "confidence",
+    "occurrence_count",
     "diagnosis_title",
     "root_cause",
     "recommended_actions",
@@ -31,6 +32,7 @@ TICKET_COLUMNS = {
     "symptom_summary",
     "window_refs",
     "signatures_seen",
+    "last_window_id",
     "last_window_end_ts",
     "created_at",
     "last_seen_at",
@@ -208,17 +210,22 @@ class TicketRepository:
         )
 
     def create_ticket(self, ticket: dict[str, Any]) -> dict[str, Any]:
-        missing = [key for key in ("ahu_id", "detected_fault_type") if not ticket.get(key)]
+        missing = [
+            key for key in ("ahu_id", "detected_fault_type") if not ticket.get(key)
+        ]
         if missing:
             raise ValueError(f"Missing required fields: {', '.join(missing)}")
 
         now = _utc_now_iso()
         payload = dict(ticket)
         payload.setdefault("ticket_id", str(uuid.uuid4()))
-        payload.setdefault("incident_key", f"{payload['ahu_id']}|{payload['detected_fault_type']}")
+        payload.setdefault(
+            "incident_key", f"{payload['ahu_id']}|{payload['detected_fault_type']}"
+        )
         payload.setdefault("lifecycle_status", "OPEN")
         payload.setdefault("diagnosis_status", "DRAFT")
         payload.setdefault("review_status", "NONE")
+        payload.setdefault("occurrence_count", 0)
         payload.setdefault("window_refs", "[]")
         payload.setdefault("signatures_seen", "[]")
         payload.setdefault("evidence_ids", "[]")
@@ -227,18 +234,38 @@ class TicketRepository:
         payload.setdefault("updated_at", now)
 
         if "lifecycle_status" in payload:
-            _ensure_status(payload["lifecycle_status"], ALLOWED_LIFECYCLE_STATUS, "lifecycle_status")
+            _ensure_status(
+                payload["lifecycle_status"],
+                ALLOWED_LIFECYCLE_STATUS,
+                "lifecycle_status",
+            )
         if "diagnosis_status" in payload:
-            _ensure_status(payload["diagnosis_status"], ALLOWED_DIAGNOSIS_STATUS, "diagnosis_status")
+            _ensure_status(
+                payload["diagnosis_status"],
+                ALLOWED_DIAGNOSIS_STATUS,
+                "diagnosis_status",
+            )
         if "review_status" in payload:
-            _ensure_status(payload["review_status"], ALLOWED_REVIEW_STATUS, "review_status")
+            _ensure_status(
+                payload["review_status"], ALLOWED_REVIEW_STATUS, "review_status"
+            )
 
         if "recommended_actions" in payload:
             payload["recommended_actions"] = _json_dump_if_needed(
                 payload.get("recommended_actions")
             )
+        if "window_refs" in payload:
+            payload["window_refs"] = (
+                _json_dump_if_needed(payload.get("window_refs")) or "[]"
+            )
+        if "signatures_seen" in payload:
+            payload["signatures_seen"] = (
+                _json_dump_if_needed(payload.get("signatures_seen")) or "[]"
+            )
         if "evidence_ids" in payload:
-            payload["evidence_ids"] = _json_dump_if_needed(payload.get("evidence_ids")) or "[]"
+            payload["evidence_ids"] = (
+                _json_dump_if_needed(payload.get("evidence_ids")) or "[]"
+            )
 
         with self._connect() as conn:
             if not payload.get("ticket_ref"):
@@ -283,11 +310,23 @@ class TicketRepository:
                 }
 
                 if "lifecycle_status" in update_fields:
-                    _ensure_status(update_fields["lifecycle_status"], ALLOWED_LIFECYCLE_STATUS, "lifecycle_status")
+                    _ensure_status(
+                        update_fields["lifecycle_status"],
+                        ALLOWED_LIFECYCLE_STATUS,
+                        "lifecycle_status",
+                    )
                 if "diagnosis_status" in update_fields:
-                    _ensure_status(update_fields["diagnosis_status"], ALLOWED_DIAGNOSIS_STATUS, "diagnosis_status")
+                    _ensure_status(
+                        update_fields["diagnosis_status"],
+                        ALLOWED_DIAGNOSIS_STATUS,
+                        "diagnosis_status",
+                    )
                 if "review_status" in update_fields:
-                    _ensure_status(update_fields["review_status"], ALLOWED_REVIEW_STATUS, "review_status")
+                    _ensure_status(
+                        update_fields["review_status"],
+                        ALLOWED_REVIEW_STATUS,
+                        "review_status",
+                    )
 
                 if "recommended_actions" in update_fields:
                     update_fields["recommended_actions"] = _json_dump_if_needed(
@@ -297,11 +336,21 @@ class TicketRepository:
                     update_fields["evidence_ids"] = _json_dump_if_needed(
                         update_fields["evidence_ids"]
                     )
+                if "window_refs" in update_fields:
+                    update_fields["window_refs"] = (
+                        _json_dump_if_needed(update_fields["window_refs"]) or "[]"
+                    )
+                if "signatures_seen" in update_fields:
+                    update_fields["signatures_seen"] = (
+                        _json_dump_if_needed(update_fields["signatures_seen"]) or "[]"
+                    )
 
                 update_fields["updated_at"] = now
 
                 if update_fields:
-                    set_clause = ", ".join([f"{key} = ?" for key in update_fields.keys()])
+                    set_clause = ", ".join(
+                        [f"{key} = ?" for key in update_fields.keys()]
+                    )
                     params = list(update_fields.values()) + [ticket_id]
                     conn.execute(
                         f"UPDATE tickets SET {set_clause} WHERE ticket_id = ?",
@@ -309,21 +358,37 @@ class TicketRepository:
                     )
             else:
                 payload = dict(ticket)
-                missing = [key for key in ("ahu_id", "detected_fault_type") if not payload.get(key)]
+                missing = [
+                    key
+                    for key in ("ahu_id", "detected_fault_type")
+                    if not payload.get(key)
+                ]
                 if missing:
                     raise ValueError(f"Missing required fields: {', '.join(missing)}")
 
                 payload.setdefault("ticket_ref", self._generate_ticket_ref(conn))
-                payload.setdefault("incident_key", f"{payload['ahu_id']}|{payload['detected_fault_type']}")
+                payload.setdefault(
+                    "incident_key",
+                    f"{payload['ahu_id']}|{payload['detected_fault_type']}",
+                )
                 payload.setdefault("lifecycle_status", "OPEN")
                 payload.setdefault("diagnosis_status", "DRAFT")
                 payload.setdefault("review_status", "NONE")
+                payload.setdefault("occurrence_count", 0)
                 payload.setdefault("window_refs", "[]")
                 payload.setdefault("signatures_seen", "[]")
 
-                payload["evidence_ids"] = _json_dump_if_needed(payload.get("evidence_ids")) or "[]"
+                payload["evidence_ids"] = (
+                    _json_dump_if_needed(payload.get("evidence_ids")) or "[]"
+                )
                 payload["recommended_actions"] = _json_dump_if_needed(
                     payload.get("recommended_actions")
+                )
+                payload["window_refs"] = (
+                    _json_dump_if_needed(payload.get("window_refs")) or "[]"
+                )
+                payload["signatures_seen"] = (
+                    _json_dump_if_needed(payload.get("signatures_seen")) or "[]"
                 )
 
                 payload.setdefault("created_at", now)
@@ -331,11 +396,21 @@ class TicketRepository:
                 payload.setdefault("updated_at", payload.get("created_at", now))
 
                 if "lifecycle_status" in payload:
-                    _ensure_status(payload["lifecycle_status"], ALLOWED_LIFECYCLE_STATUS, "lifecycle_status")
+                    _ensure_status(
+                        payload["lifecycle_status"],
+                        ALLOWED_LIFECYCLE_STATUS,
+                        "lifecycle_status",
+                    )
                 if "diagnosis_status" in payload:
-                    _ensure_status(payload["diagnosis_status"], ALLOWED_DIAGNOSIS_STATUS, "diagnosis_status")
+                    _ensure_status(
+                        payload["diagnosis_status"],
+                        ALLOWED_DIAGNOSIS_STATUS,
+                        "diagnosis_status",
+                    )
                 if "review_status" in payload:
-                    _ensure_status(payload["review_status"], ALLOWED_REVIEW_STATUS, "review_status")
+                    _ensure_status(
+                        payload["review_status"], ALLOWED_REVIEW_STATUS, "review_status"
+                    )
 
                 columns = [col for col in payload.keys() if col in TICKET_COLUMNS]
                 values = [payload[col] for col in columns]

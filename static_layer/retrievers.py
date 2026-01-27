@@ -9,6 +9,7 @@ Both collections live in persistent Chroma at ./chroma_db.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
@@ -37,7 +38,8 @@ def _get_client_and_collections():
             "Missing dependency: chromadb. Install with `pip install chromadb`."
         ) from exc
 
-    client = chromadb.PersistentClient(path=str(Path("chroma_db").resolve()))
+    persist_dir = os.getenv("CHROMA_PERSIST_DIR", "chroma_db")
+    client = chromadb.PersistentClient(path=str(Path(persist_dir).resolve()))
     embed_fn = OpenAIEmbeddingFunction()
 
     manuals = client.get_or_create_collection(

@@ -59,6 +59,20 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         "SELECT name FROM sqlite_master WHERE type='table' AND name='tickets'"
     ).fetchone()
     if row is not None:
+        # Lightweight online migrations for existing DBs.
+        try:
+            cols = conn.execute("PRAGMA table_info(tickets)").fetchall()
+            existing = {str(c[1]) for c in cols if c and len(c) > 1}
+
+            if "occurrence_count" not in existing:
+                conn.execute(
+                    "ALTER TABLE tickets ADD COLUMN occurrence_count INTEGER NOT NULL DEFAULT 0"
+                )
+            if "last_window_id" not in existing:
+                conn.execute("ALTER TABLE tickets ADD COLUMN last_window_id TEXT")
+        except sqlite3.OperationalError:
+            # If migrations fail (e.g., locked), let the caller retry via busy_timeout.
+            pass
         return
     schema_path = Path(__file__).with_name("schema.sql")
     with schema_path.open("r", encoding="utf-8") as handle:
