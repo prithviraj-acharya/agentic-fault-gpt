@@ -8,7 +8,7 @@ import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Literal, Optional, Set
 
 from diagnostic_agent.controller.diagnosis_worker import DiagnosisWorker, WorkerConfig
 from diagnostic_agent.controller.fault_type_resolver import FaultTypeResolver
@@ -32,6 +32,18 @@ logger = logging.getLogger(__name__)
 def _log(event: str, **fields) -> None:
     payload = {"event": event, **fields}
     logger.info("%s", payload)
+
+
+OpenAIMode = Literal["cheap", "strong"]
+
+
+def _parse_openai_mode(raw: str) -> Optional[OpenAIMode]:
+    v = (raw or "").strip().lower()
+    if v == "cheap":
+        return "cheap"
+    if v == "strong":
+        return "strong"
+    return None
 
 
 @dataclass
@@ -441,9 +453,35 @@ def setup_logging() -> None:
 
 def main() -> None:  # pragma: no cover
     setup_logging()
-    from diagnostic_agent.reasoner.mock_reasoner import MockReasoner
 
-    controller = Phase6Controller(reasoner=MockReasoner())
+    # Default stays mock for safety/local-dev; enable OpenAI explicitly via env.
+    # - PHASE6_REASONER=mock|openai
+    # - PHASE6_OPENAI_MODE=cheap|strong (default: cheap)
+    # - PHASE6_OPENAI_MODEL=<explicit override>
+    # - PHASE6_OPENAI_TIMEOUT_S=<seconds>
+    reasoner_kind = (os.getenv("PHASE6_REASONER") or "mock").strip().lower()
+    openai_mode = _parse_openai_mode(os.getenv("PHASE6_OPENAI_MODE") or "cheap")
+    openai_model = (os.getenv("PHASE6_OPENAI_MODEL") or "").strip() or None
+    try:
+        timeout_s = float((os.getenv("PHASE6_OPENAI_TIMEOUT_S") or "30").strip())
+    except Exception:
+        timeout_s = 30.0
+
+    if reasoner_kind == "openai":
+        from diagnostic_agent.reasoner.openai_reasoner import OpenAIReasoner
+
+        if not os.getenv("OPENAI_API_KEY"):
+            raise RuntimeError("PHASE6_REASONER=openai requires OPENAI_API_KEY")
+
+        reasoner = OpenAIReasoner(mode=openai_mode, timeout_s=timeout_s)
+        if openai_model:
+            reasoner.model = str(openai_model)
+    else:
+        from diagnostic_agent.reasoner.mock_reasoner import MockReasoner
+
+        reasoner = MockReasoner()
+
+    controller = Phase6Controller(reasoner=reasoner)  # type: ignore[arg-type]
     _log("phase6.controller_start", cfg=controller.cfg.__dict__)
     controller.start()
 
