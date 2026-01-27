@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import threading
 from dataclasses import dataclass
@@ -28,6 +29,31 @@ logger = logging.getLogger(__name__)
 def _log(event: str, **fields) -> None:
     payload = {"event": event, **fields}
     logger.info("%s", payload)
+
+
+def _trace_enabled() -> bool:
+    v = (os.getenv("PHASE6_TRACE_IO") or "").strip().lower()
+    return v in {"1", "true", "yes", "on"}
+
+
+def _one_line(s: str) -> str:
+    return (s or "").replace("\r\n", "\n").replace("\n", " ").strip()
+
+
+def _docs_trace(
+    docs: list[RetrievedDoc], *, max_docs: int = 6, max_text: int = 180
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for d in (docs or [])[:max_docs]:
+        out.append(
+            {
+                "corpus": d.corpus,
+                "doc_id": d.doc_id,
+                "distance": d.distance,
+                "text_preview": _one_line(d.text)[:max_text],
+            }
+        )
+    return out
 
 
 @dataclass
@@ -106,6 +132,14 @@ class DiagnosisWorker:
     def _process(self, job: DiagnosisJob) -> None:
         ahu_id, fault_type = job.incident_key
         self.incident_manager.set_in_progress(job.incident_key, True)
+
+        _log(
+            "phase6.diagnosis_job_started",
+            incident_key=list(job.incident_key),
+            ticket_id=job.ticket_id,
+            allow_refine=job.allow_refine,
+        )
+
         st = self.incident_manager.snapshot_state(job.incident_key)
         recent_windows = self.incident_manager.snapshot_windows(job.incident_key)
         ctx = IncidentContext(
@@ -175,9 +209,35 @@ class DiagnosisWorker:
             error=stats1.error,
         )
 
+        if _trace_enabled():
+            _log(
+                "phase6.retrieval_trace",
+                incident_key=list(job.incident_key),
+                ticket_id=job.ticket_id,
+                query_preview=_one_line(query)[:500],
+                retrieved_docs_total=len(docs_final),
+                docs_preview=_docs_trace(docs_final),
+            )
+
         calls = 0
         res1 = self.reasoner.diagnose(ctx)
         calls += 1
+
+        if _trace_enabled():
+            _log(
+                "phase6.reasoner_result_trace",
+                incident_key=list(job.incident_key),
+                ticket_id=job.ticket_id,
+                stage=ctx.stage,
+                result={
+                    "title": res1.title,
+                    "confidence": float(res1.confidence),
+                    "conflict": bool(res1.conflict),
+                    "evidence_ids": list(res1.evidence_ids or [])[:12],
+                    "recommended_actions": list(res1.recommended_actions or [])[:8],
+                    "root_cause_preview": _one_line(res1.root_cause)[:260],
+                },
+            )
 
         refine = False
         if job.allow_refine and self.cfg.allow_stage2:
@@ -210,6 +270,22 @@ class DiagnosisWorker:
 
             res = self.reasoner.diagnose(ctx)
             calls += 1
+
+            if _trace_enabled():
+                _log(
+                    "phase6.reasoner_result_trace",
+                    incident_key=list(job.incident_key),
+                    ticket_id=job.ticket_id,
+                    stage=ctx.stage,
+                    result={
+                        "title": res.title,
+                        "confidence": float(res.confidence),
+                        "conflict": bool(res.conflict),
+                        "evidence_ids": list(res.evidence_ids or [])[:12],
+                        "recommended_actions": list(res.recommended_actions or [])[:8],
+                        "root_cause_preview": _one_line(res.root_cause)[:260],
+                    },
+                )
         else:
             _log(
                 "phase6.stage2_skipped",

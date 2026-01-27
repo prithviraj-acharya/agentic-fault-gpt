@@ -157,13 +157,37 @@ export function TicketsPage() {
   }, [API_BASE_URL, reviewStatusParam, faultTypeParam, qParam]);
 
   const rows = useMemo(() => {
+    const toTitleCase = (s: string) =>
+      s
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+
+    const formatFaultLabel = (raw: unknown) => {
+      const s = String(raw ?? '').trim();
+      if (!s) return '—';
+      // Keep trailing "FAULT" as a user-facing word (e.g., COOLING_COIL_FAULT -> "Cooling Coil Fault")
+      const cleaned = s.replace(/_/g, ' ').trim();
+      return toTitleCase(cleaned);
+    };
+
+    const formatAhuLabel = (raw: unknown) => {
+      const s = String(raw ?? '').trim();
+      if (!s) return '—';
+      if (/^ahu\s*\d+/i.test(s)) return s.replace(/^ahu\s*/i, 'AHU ');
+      if (/^\d+$/.test(s)) return `AHU ${s}`;
+      return s;
+    };
+
     return tickets.map((t) => {
       const confidencePct = Math.max(0, Math.min(100, Math.round((Number(t.confidence ?? 0) || 0) * 100)));
       return {
         ticket_id: t.ticket_id,
         ticket_ref: t.ticket_ref,
-        fault: t.detected_fault_type,
-        location: t.ahu_id,
+        fault: formatFaultLabel(t.detected_fault_type),
+        location: formatAhuLabel(t.ahu_id),
         confidencePct,
         updated: formatDateTime(t.updated_at),
         lifecycle_status: t.lifecycle_status,

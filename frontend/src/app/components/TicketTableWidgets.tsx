@@ -1,15 +1,23 @@
 import { CheckCircleIcon, XCircleIcon, ArrowRightIcon } from '@heroicons/react/20/solid';
 
 export function ConfidenceBar({ value }: { value: number }) {
-  let color = 'bg-green-500';
-  if (value < 70) color = 'bg-rose-500';
-  else if (value < 85) color = 'bg-amber-400';
+  const v = typeof value === 'number' && !Number.isNaN(value) ? Math.max(0, Math.min(100, value)) : 0;
+
+  let barColor = 'bg-emerald-500';
+  let textColor = 'text-emerald-700';
+  if (v < 50) {
+    barColor = 'bg-rose-500';
+    textColor = 'text-rose-700';
+  } else if (v < 70) {
+    barColor = 'bg-amber-400';
+    textColor = 'text-amber-800';
+  }
   return (
     <div className="flex items-center gap-2 min-w-[90px]">
       <div className="relative w-20 h-2 bg-slate-100 rounded">
-        <div className={`absolute left-0 top-0 h-2 rounded ${color}`} style={{ width: `${value}%` }} />
+        <div className={`absolute left-0 top-0 h-2 rounded ${barColor}`} style={{ width: `${v}%` }} />
       </div>
-      <span className="text-xs font-medium text-slate-700 w-8 text-right">{value}%</span>
+      <span className={`text-xs font-semibold w-8 text-right ${textColor}`}>{Math.round(v)}%</span>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import uuid
 from dataclasses import dataclass
@@ -450,18 +451,31 @@ class TicketRepository:
         return ticket
 
     def metrics(self) -> dict[str, int]:
+        # "High confidence" is a presentation/metrics concept; keep it configurable.
+        # Defaults to 0.60 (60%). Supports percent-style values like "60" -> 0.60.
+        raw_threshold = (os.getenv("TICKETS_HIGH_CONFIDENCE_THRESHOLD") or "").strip()
+        threshold = 0.60
+        if raw_threshold:
+            try:
+                parsed = float(raw_threshold)
+                if parsed > 1.0:
+                    parsed = parsed / 100.0
+                threshold = max(0.0, min(1.0, parsed))
+            except Exception:
+                threshold = 0.60
+
         sql = """
         SELECT
           SUM(CASE WHEN lifecycle_status = 'OPEN' THEN 1 ELSE 0 END) AS active_count,
           SUM(CASE WHEN review_status = 'NONE' AND diagnosis_status = 'DIAGNOSED' THEN 1 ELSE 0 END) AS awaiting_review_count,
           SUM(CASE WHEN review_status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count,
           SUM(CASE WHEN review_status = 'REJECTED' THEN 1 ELSE 0 END) AS rejected_count,
-          SUM(CASE WHEN diagnosis_status = 'DIAGNOSED' AND confidence >= 0.85 THEN 1 ELSE 0 END) AS high_confidence_count
+          SUM(CASE WHEN diagnosis_status = 'DIAGNOSED' AND confidence >= ? THEN 1 ELSE 0 END) AS high_confidence_count
         FROM tickets
         """
 
         with self._connect() as conn:
-            row = conn.execute(sql).fetchone()
+            row = conn.execute(sql, (float(threshold),)).fetchone()
 
         def _i(value: Any) -> int:
             return int(value or 0)

@@ -4,8 +4,10 @@ import json
 import logging
 import os
 import queue
+import sys
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
 from diagnostic_agent.controller.diagnosis_worker import DiagnosisWorker, WorkerConfig
@@ -46,10 +48,14 @@ class Phase6Config:
 
     poll_timeout_s: float = 0.5
 
-    refine_threshold: float = 0.75
+    # Confidence threshold below which we try an additional refinement pass.
+    # Interpreted as a fraction in [0, 1].
+    refine_threshold: float = 0.50
 
 
 def load_phase6_config() -> Phase6Config:
+    default_cfg = Phase6Config()
+
     def _env(name: str, default: str) -> str:
         v = os.getenv(name)
         return default if v is None else str(v)
@@ -67,6 +73,26 @@ def load_phase6_config() -> Phase6Config:
             return bool(default)
         return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
+    def _env_float(name: str, default: float) -> float:
+        v = os.getenv(name)
+        if v is None:
+            return float(default)
+        try:
+            parsed = float(str(v).strip())
+        except Exception:
+            return float(default)
+
+        # Convenience: allow percent-like values (e.g., 50 -> 0.50)
+        if parsed > 1.0:
+            parsed = parsed / 100.0
+
+        # Clamp to [0, 1]
+        if parsed < 0.0:
+            return 0.0
+        if parsed > 1.0:
+            return 1.0
+        return parsed
+
     return Phase6Config(
         kafka_bootstrap_servers=_env("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
         kafka_topic=_env("PHASE6_KAFKA_WINDOW_TOPIC", "window_summaries"),
@@ -76,7 +102,9 @@ def load_phase6_config() -> Phase6Config:
         n_trigger=_env_int("PHASE6_N_TRIGGER", 2),
         k_clear_windows=_env_int("PHASE6_K_CLEAR_WINDOWS", 3),
         poll_timeout_s=float(_env("PHASE6_POLL_TIMEOUT_S", "0.5")),
-        refine_threshold=float(_env("PHASE6_REFINE_THRESHOLD", "0.85")),
+        refine_threshold=_env_float(
+            "PHASE6_REFINE_THRESHOLD", default_cfg.refine_threshold
+        ),
     )
 
 
@@ -314,6 +342,15 @@ class Phase6Controller:
         if not st.ticket_id:
             return
 
+        force_diagnose = str(
+            os.getenv("PHASE6_FORCE_DIAGNOSE") or ""
+        ).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
         if st.pending or st.in_progress:
             _log(
                 "phase6.diagnosis_skipped",
@@ -331,7 +368,7 @@ class Phase6Controller:
             )
             return
 
-        if str(st.diagnosis_status) != "DRAFT":
+        if str(st.diagnosis_status) != "DRAFT" and not force_diagnose:
             _log(
                 "phase6.diagnosis_skipped",
                 incident_key=list(key),
@@ -339,6 +376,14 @@ class Phase6Controller:
                 diagnosis_status=st.diagnosis_status,
             )
             return
+
+        if force_diagnose and str(st.diagnosis_status) != "DRAFT":
+            _log(
+                "phase6.diagnosis_forced",
+                incident_key=list(key),
+                ticket_id=st.ticket_id,
+                previous_status=str(st.diagnosis_status),
+            )
 
         try:
             self.ticket_client.patch_ticket(
@@ -366,7 +411,32 @@ class Phase6Controller:
 
 def setup_logging() -> None:
     level = os.getenv("PHASE6_LOG_LEVEL", "INFO").upper().strip()
-    logging.basicConfig(level=getattr(logging, level, logging.INFO))
+    log_level = getattr(logging, level, logging.INFO)
+    fmt = "%(asctime)s %(levelname)s %(name)s %(message)s"
+
+    handlers: list[logging.Handler] = [logging.StreamHandler(stream=sys.stdout)]
+
+    log_file = (os.getenv("PHASE6_LOG_FILE") or "").strip()
+    if log_file:
+        try:
+            p = Path(log_file)
+            if p.parent:
+                p.parent.mkdir(parents=True, exist_ok=True)
+            handlers.append(logging.FileHandler(p, encoding="utf-8"))
+        except Exception as exc:
+            # Fall back to stdout only if file logging can't be initialized.
+            logging.getLogger(__name__).warning(
+                "Failed to initialize PHASE6_LOG_FILE=%r: %s", log_file, exc
+            )
+
+    logging.basicConfig(level=log_level, format=fmt, handlers=handlers, force=True)
+
+    # httpx can be very chatty at INFO (e.g., "HTTP Request: POST ...").
+    # Keep those logs off by default; our structured trace logs are more useful.
+    httpx_level_name = os.getenv("PHASE6_HTTPX_LOG_LEVEL", "WARNING").upper().strip()
+    httpx_level = getattr(logging, httpx_level_name, logging.WARNING)
+    logging.getLogger("httpx").setLevel(httpx_level)
+    logging.getLogger("httpcore").setLevel(httpx_level)
 
 
 def main() -> None:  # pragma: no cover

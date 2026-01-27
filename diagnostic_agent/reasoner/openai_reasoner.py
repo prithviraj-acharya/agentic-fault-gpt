@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,20 @@ from diagnostic_agent.reasoner.openai.prompts import (
     build_system_prompt,
     build_user_prompt,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _trace_enabled(var_name: str) -> bool:
+    v = (os.getenv(var_name) or "").strip().lower()
+    return v in {"1", "true", "yes", "on"}
+
+
+def _preview(text: str, *, max_chars: int) -> str:
+    t = (text or "").replace("\r\n", "\n")
+    if len(t) <= max_chars:
+        return t
+    return t[: max_chars - 3] + "..."
 
 
 @dataclass
@@ -49,7 +64,7 @@ class OpenAIReasoner:
     timeout_s: float = 30.0
 
     # Output size control for the Responses API.
-    max_output_tokens: int = 1200
+    max_output_tokens: int = 1800
 
     def diagnose(
         self, ctx: IncidentContext, model_override: Optional[str] = None
@@ -93,6 +108,44 @@ class OpenAIReasoner:
                 safe_evidence_ids=allowed_evidence_ids,
             )
 
+        max_out = self.max_output_tokens
+        try:
+            env_max = (os.getenv("PHASE6_OPENAI_MAX_OUTPUT_TOKENS") or "").strip()
+            if env_max:
+                max_out = int(env_max)
+        except Exception:
+            max_out = self.max_output_tokens
+
+        trace_io = _trace_enabled("PHASE6_TRACE_IO")
+        trace_openai = _trace_enabled("PHASE6_TRACE_OPENAI")
+        trace_prompts = trace_openai or _trace_enabled("PHASE6_TRACE_OPENAI_PROMPTS")
+        trace_responses = trace_openai or _trace_enabled(
+            "PHASE6_TRACE_OPENAI_RESPONSES"
+        )
+
+        if trace_io or trace_openai:
+            logger.info(
+                "%s",
+                {
+                    "event": "phase6.openai_call_start",
+                    "model": model,
+                    "stage": int(getattr(ctx, "stage", 1) or 1),
+                    "max_output_tokens": int(self.max_output_tokens),
+                    "allowed_evidence_ids_count": len(allowed_evidence_ids),
+                    "windows_count": len(ctx.recent_windows or []),
+                    "retrieved_docs_count": len(ctx.retrieved_docs or []),
+                },
+            )
+            if trace_prompts:
+                logger.info(
+                    "%s",
+                    {
+                        "event": "phase6.openai_prompt_preview",
+                        "system_preview": _preview(system_msg, max_chars=900),
+                        "user_preview": _preview(user_msg, max_chars=3000),
+                    },
+                )
+
         # --- OpenAI call (Responses API, single shot) ---
         raw_text: Optional[str] = None
         try:
@@ -102,13 +155,42 @@ class OpenAIReasoner:
                 system_msg=system_msg,
                 user_msg=user_msg,
                 timeout_s=self.timeout_s,
-                max_output_tokens=self.max_output_tokens,
+                max_output_tokens=max_out,
             )
+
+            if trace_responses:
+                logger.info(
+                    "%s",
+                    {
+                        "event": "phase6.openai_raw_output_preview",
+                        "raw_preview": _preview(str(raw_text or ""), max_chars=3500),
+                    },
+                )
+
             parsed = parse_and_validate(raw_text, allowed_evidence_ids)
             if parsed is not None:
+                if trace_io or trace_openai:
+                    logger.info(
+                        "%s",
+                        {
+                            "event": "phase6.openai_parsed_result",
+                            "result": {
+                                "title": parsed.title,
+                                "confidence": float(parsed.confidence),
+                                "conflict": bool(parsed.conflict),
+                                "evidence_ids": list(parsed.evidence_ids or [])[:12],
+                            },
+                        },
+                    )
                 return parsed
 
             # --- One repair retry (schema/JSON only) ---
+            raw_for_repair = (raw_text or "").strip() if raw_text is not None else ""
+            if raw_for_repair.startswith("Response("):
+                raw_for_repair = ""
+            if len(raw_for_repair) > 2000:
+                raw_for_repair = raw_for_repair[:2000] + "..."
+
             repair_msg = (
                 "Fix the following model output so it matches the DiagnosisResult schema exactly. "
                 "Output JSON only (no markdown, no explanations).\n\n"
@@ -117,8 +199,8 @@ class OpenAIReasoner:
                 "Schema keys: title (str), root_cause (str), confidence (0..1 float), "
                 "recommended_actions (list[str]), evidence_ids (list[str]), conflict (bool).\n\n"
                 f"Allowed evidence_ids: {allowed_evidence_ids}\n\n"
-                "Model output to repair:\n"
-                f"{raw_text}"
+                "Model output to repair (may be empty if the first response was incomplete/non-JSON):\n"
+                f"{raw_for_repair}"
             )
             raw_text_2 = self._call_openai(
                 api_key=api_key,
@@ -128,10 +210,33 @@ class OpenAIReasoner:
                     "No extra keys."
                 ),
                 user_msg=repair_msg,
-                max_output_tokens=min(max(self.max_output_tokens, 600), 1400),
+                max_output_tokens=min(max(max_out, 600), 1400),
             )
+
+            if trace_responses:
+                logger.info(
+                    "%s",
+                    {
+                        "event": "phase6.openai_raw_output_preview_repair",
+                        "raw_preview": _preview(str(raw_text_2 or ""), max_chars=3500),
+                    },
+                )
+
             parsed2 = parse_and_validate(raw_text_2, allowed_evidence_ids)
             if parsed2 is not None:
+                if trace_io or trace_openai:
+                    logger.info(
+                        "%s",
+                        {
+                            "event": "phase6.openai_parsed_result",
+                            "result": {
+                                "title": parsed2.title,
+                                "confidence": float(parsed2.confidence),
+                                "conflict": bool(parsed2.conflict),
+                                "evidence_ids": list(parsed2.evidence_ids or [])[:12],
+                            },
+                        },
+                    )
                 return parsed2
 
             return fallback_result(
