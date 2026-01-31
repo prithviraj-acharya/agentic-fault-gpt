@@ -245,19 +245,20 @@ class Phase6Controller:
                     "symptom_summary": window.summary_text,
                     "last_window_id": window.window_id,
                 }
-                created = self.ticket_client.create_ticket(payload)
-                ticket_id = str(created.get("ticket_id") or "")
-                self.incidents.set_ticket(
-                    key,
-                    ticket_id=ticket_id,
-                    diagnosis_status=str(created.get("diagnosis_status") or "DRAFT"),
-                    occurrence_count=int(created.get("occurrence_count") or 0),
-                )
-                _log(
-                    "phase6.ticket_created",
-                    incident_key=[ahu_id, ft],
-                    ticket_id=ticket_id,
-                )
+                if st.seen_streak >= int(self.cfg.n_trigger):
+                    created = self.ticket_client.create_ticket(payload)
+                    ticket_id = str(created.get("ticket_id") or "")
+                    self.incidents.set_ticket(
+                        key,
+                        ticket_id=ticket_id,
+                        diagnosis_status=str(created.get("diagnosis_status") or "DRAFT"),
+                        occurrence_count=int(created.get("occurrence_count") or 0),
+                    )
+                    _log(
+                        "phase6.ticket_created",
+                        incident_key=[ahu_id, ft],
+                        ticket_id=ticket_id,
+                    )
 
             # Update ticket each time incident seen
             st = self.incidents.get(key)
